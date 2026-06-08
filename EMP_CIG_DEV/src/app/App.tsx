@@ -85,7 +85,7 @@ export default function App() {
   const [darkMode, setDarkMode] = useState(true);
   const [history, setHistory] = useState<Screen[]>([]);
   const [selectedMedia, setSelectedMedia] = useState<BackendMedia | null>(null);
-
+  const [selectedEventId, setSelectedEventId] = useState<string>("");
   // Restore session on mount (handles page refresh)
   useEffect(() => {
     const session = restoreSession();
@@ -111,9 +111,9 @@ export default function App() {
     setHistory([]);
   };
 
-  const navigate = (screen: string, media?: BackendMedia) => {
+  const navigate = (screen: string, media?: BackendMedia, eventId?: string) => {
   if (media) setSelectedMedia(media);
-
+  if (eventId) setSelectedEventId(eventId);
   setHistory((h) => [...h, currentScreen]);
   setCurrentScreen(screen as Screen);
 };
@@ -141,7 +141,7 @@ export default function App() {
       case "createevent":
         return <CreateEvent onBack={goBack} onCreated={() => navigate("eventdetails")} user={currentUser as { name?: string; email?: string; role?: string }} />;
       case "eventdetails":
-        return <EventDetails onBack={goBack} onNavigate={navigate} />;
+        return <EventDetails eventId={selectedEventId} onBack={goBack} onNavigate={navigate} />;
       case "gallery":
         return <Gallery onNavigate={navigate} />;
       case "upload":

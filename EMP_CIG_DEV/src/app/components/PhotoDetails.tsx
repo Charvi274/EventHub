@@ -79,31 +79,40 @@ function getCurrentUser(): { _id: string; role: string } | null {
 
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ── COMMENTS  (no backend yet — isolated for future integration) ──────────────
-// When the comments API is ready:
-//   GET  /api/media/:id/comments   → fetch comment list
-//   POST /api/media/:id/comments   → post new comment
-//   PUT  /api/comments/:id/like    → toggle comment like
-// Replace the STUB_COMMENTS constant and the three handler stubs below.
+// ── COMMENTS — backend shape returned by GET/POST /api/comments/media/:id ────
 // ─────────────────────────────────────────────────────────────────────────────
 
-interface Comment {
-  id: number;
-  user: string;
-  avatar: string;
-  role: string;
-  time: string;
+interface BackendComment {
+  _id: string;
+  mediaId: string;
+  author: {
+    _id: string;
+    name: string;
+    role: string;
+    avatar?: string;
+  };
   text: string;
-  likes: number;
-  color: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
-const STUB_COMMENTS: Comment[] = [
-  { id: 1, user: "Priya Sharma",  avatar: "P", role: "Photographer", time: "2h ago",  text: "Absolutely stunning shot! The lighting here is perfect 📸",                              likes: 23, color: "#ec4899" },
-  { id: 2, user: "Rahul Gupta",   avatar: "R", role: "Member",       time: "4h ago",  text: "This was such an incredible moment! I was standing right there when this happened",    likes: 15, color: "#3b82f6" },
-  { id: 3, user: "Ananya Iyer",   avatar: "A", role: "Admin",        time: "6h ago",  text: "Great capture! You really have an eye for these candid moments 🎯",                    likes: 8,  color: "#10b981" },
-  { id: 4, user: "Dev Patel",     avatar: "D", role: "Viewer",       time: "1d ago",  text: "Miss these days... Tech Fest was absolutely fire 🔥",                                   likes: 42, color: "#f59e0b" },
-];
+// ── Deterministic avatar colour from a string ────────────────────────────────
+// Same palette used by the stub data; keeps avatars visually consistent.
+const AVATAR_COLORS = ["#ec4899", "#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#06b6d4"];
+function avatarColor(id: string): string {
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) hash = id.charCodeAt(i) + ((hash << 5) - hash);
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+}
+
+// ── Human-readable relative time ─────────────────────────────────────────────
+function timeAgo(iso: string): string {
+  const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+  if (diff < 60)   return "just now";
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return `${Math.floor(diff / 86400)}d ago`;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Component
@@ -155,14 +164,45 @@ export function PhotoDetails({
   const [deleteError,    setDeleteError]    = useState<string | null>(null);
   const [downloadLoading, setDownloadLoading] = useState(false);
 
-  // ── COMMENTS state (no backend yet) ────────────────────────────────────────
-  const [commentText,    setCommentText]    = useState("");
-  const [likedComments,  setLikedComments]  = useState<number[]>([]);
+  // ── COMMENTS state ──────────────────────────────────────────────────────────
+  const [comments,        setComments]        = useState<BackendComment[]>([]);
+  const [commentsLoading, setCommentsLoading] = useState(false);
+  const [commentText,     setCommentText]     = useState("");
+  const [commentPosting,  setCommentPosting]  = useState(false);
+  const [commentError,    setCommentError]    = useState<string | null>(null);
+  const [deletingComment, setDeletingComment] = useState<string | null>(null);
 
   // Keep liked/count in sync if a parent re-uses this component for a different item
   useEffect(() => {
     setLiked(alreadyLiked);
     setLikeCount(media.likes.count);
+  }, [media._id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Fetch comments whenever the viewed media item changes ───────────────────
+  useEffect(() => {
+    let cancelled = false;
+
+    setComments([]);
+    setCommentError(null);
+    setCommentsLoading(true);
+
+    fetch(`/api/comments/media/${media._id}`, {
+      headers: { Authorization: `Bearer ${getToken()}` },
+    })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((data) => {
+        if (!cancelled) {
+          setComments(Array.isArray(data.data) ? data.data : []);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setCommentError("Could not load comments.");
+      })
+      .finally(() => {
+        if (!cancelled) setCommentsLoading(false);
+      });
+
+    return () => { cancelled = true; };
   }, [media._id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -299,16 +339,64 @@ const handleSave = async () => {
     }
   };
 
-  // ── COMMENTS stubs (no backend yet) ────────────────────────────────────────
-  const handleCommentLikeToggle = (id: number) =>
-    setLikedComments((prev) =>
-      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
-    );
+  // ── POST a new comment ───────────────────────────────────────────────────────
+  const handleCommentSubmit = async () => {
+    const text = commentText.trim();
+    if (!text || commentPosting) return;
 
-  const handleCommentSubmit = () => {
-    // TODO: POST /api/media/:id/comments  when backend is ready
-    // For now: clear input only
-    setCommentText("");
+    setCommentPosting(true);
+    setCommentError(null);
+
+    try {
+      const res = await fetch(`/api/comments/media/${media._id}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${getToken()}`,
+        },
+        body: JSON.stringify({ text }),
+      });
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.message ?? `HTTP ${res.status}`);
+      }
+
+      const data = await res.json();
+      const newComment: BackendComment = data.data;
+
+      // Prepend so the new comment appears at the top (list is newest-first)
+      setComments((prev) => [newComment, ...prev]);
+      setCommentText("");
+    } catch (err: unknown) {
+      setCommentError(err instanceof Error ? err.message : "Failed to post comment.");
+    } finally {
+      setCommentPosting(false);
+    }
+  };
+
+  // ── DELETE a comment ─────────────────────────────────────────────────────────
+  const handleCommentDelete = async (commentId: string) => {
+    if (deletingComment) return;
+    setDeletingComment(commentId);
+
+    try {
+      const res = await fetch(`/api/comments/${commentId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${getToken()}` },
+      });
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.message ?? `HTTP ${res.status}`);
+      }
+
+      setComments((prev) => prev.filter((c) => c._id !== commentId));
+    } catch (err: unknown) {
+      setCommentError(err instanceof Error ? err.message : "Failed to delete comment.");
+    } finally {
+      setDeletingComment(null);
+    }
   };
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -410,12 +498,12 @@ const handleSave = async () => {
             {likeCount.toLocaleString()} Likes
           </button>
 
-          {/* Comments count — static (no backend yet) */}
+          {/* Comments count — live */}
           <button
             className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all hover:scale-105"
             style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "#c4cdd8" }}
           >
-            <MessageCircle size={16} /> {STUB_COMMENTS.length} Comments
+            <MessageCircle size={16} /> {comments.length} Comments
           </button>
 
           <div className="flex gap-2 ml-auto flex-wrap">
@@ -562,51 +650,105 @@ const handleSave = async () => {
           )}
         </div>
 
-        {/* ── COMMENTS (no backend yet) ──────────────────────────────────────── */}
+        {/* ── COMMENTS ───────────────────────────────────────────────────────── */}
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
+
+          {/* Header */}
           <p className="text-sm font-semibold text-white">
-            Comments ({STUB_COMMENTS.length})
+            Comments ({commentsLoading ? "…" : comments.length})
           </p>
-          {STUB_COMMENTS.map((comment) => (
-            <div key={comment.id} className="flex gap-3">
-              <div
-                className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
-                style={{
-                  background: `${comment.color}25`,
-                  color: comment.color,
-                  border: `1px solid ${comment.color}40`,
-                }}
-              >
-                {comment.avatar}
-              </div>
-              <div className="flex-1">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-xs font-semibold text-white">{comment.user}</span>
-                  <span
-                    className="text-xs px-1.5 py-0.5 rounded"
-                    style={{ background: `${comment.color}15`, color: comment.color, fontSize: 10 }}
-                  >
-                    {comment.role}
-                  </span>
-                  <span className="text-xs ml-auto" style={{ color: "#6b7fa3" }}>{comment.time}</span>
-                </div>
-                <p className="text-xs leading-relaxed mb-1.5" style={{ color: "#c4cdd8" }}>
-                  {comment.text}
-                </p>
-                <button
-                  onClick={() => handleCommentLikeToggle(comment.id)}
-                  className="flex items-center gap-1 text-xs transition-colors"
-                  style={{ color: likedComments.includes(comment.id) ? "#ec4899" : "#6b7fa3" }}
-                >
-                  <Heart
-                    size={11}
-                    fill={likedComments.includes(comment.id) ? "currentColor" : "none"}
-                  />
-                  {likedComments.includes(comment.id) ? comment.likes + 1 : comment.likes}
-                </button>
-              </div>
+
+          {/* Error banner (fetch or post/delete failure) */}
+          {commentError && (
+            <div
+              className="px-3 py-2 rounded-xl text-xs"
+              style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", color: "#ef4444" }}
+            >
+              {commentError}
             </div>
-          ))}
+          )}
+
+          {/* Loading skeleton */}
+          {commentsLoading && (
+            <div className="space-y-3">
+              {[1, 2, 3].map((n) => (
+                <div key={n} className="flex gap-3 animate-pulse">
+                  <div className="w-8 h-8 rounded-full flex-shrink-0" style={{ background: "rgba(255,255,255,0.06)" }} />
+                  <div className="flex-1 space-y-1.5">
+                    <div className="h-2.5 rounded-full w-1/3" style={{ background: "rgba(255,255,255,0.06)" }} />
+                    <div className="h-2 rounded-full w-full"  style={{ background: "rgba(255,255,255,0.04)" }} />
+                    <div className="h-2 rounded-full w-2/3"  style={{ background: "rgba(255,255,255,0.04)" }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Empty state */}
+          {!commentsLoading && comments.length === 0 && !commentError && (
+            <p className="text-xs text-center py-6" style={{ color: "#6b7fa3" }}>
+              No comments yet. Be the first!
+            </p>
+          )}
+
+          {/* Comment list */}
+          {!commentsLoading && comments.map((comment) => {
+            const color   = avatarColor(comment.author._id);
+            const initial = comment.author.name.trim()[0]?.toUpperCase() ?? "?";
+            const isOwn   = !!currentUser && comment.author._id === currentUser._id;
+            const isAdmin = currentUser?.role === "Admin";
+            const canDeleteComment = isOwn || isAdmin;
+
+            return (
+              <div key={comment._id} className="flex gap-3 group">
+                {/* Avatar */}
+                <div
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
+                  style={{
+                    background: `${color}25`,
+                    color,
+                    border: `1px solid ${color}40`,
+                  }}
+                >
+                  {initial}
+                </div>
+
+                <div className="flex-1">
+                  {/* Name · role · time · delete */}
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-xs font-semibold text-white">{comment.author.name}</span>
+                    <span
+                      className="text-xs px-1.5 py-0.5 rounded"
+                      style={{ background: `${color}15`, color, fontSize: 10 }}
+                    >
+                      {comment.author.role}
+                    </span>
+                    <span className="text-xs ml-auto" style={{ color: "#6b7fa3" }}>
+                      {timeAgo(comment.createdAt)}
+                    </span>
+
+                    {/* Delete — visible on hover for permitted users */}
+                    {canDeleteComment && (
+                      <button
+                        onClick={() => handleCommentDelete(comment._id)}
+                        disabled={deletingComment === comment._id}
+                        title="Delete comment"
+                        className="opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-40"
+                        style={{ color: "#ef4444" }}
+                      >
+                        <Trash2 size={11} />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Text */}
+                  <p className="text-xs leading-relaxed" style={{ color: "#c4cdd8" }}>
+                    {comment.text}
+                  </p>
+                </div>
+              </div>
+            );
+          })}
         </div>
 
         {/* Comment input */}
@@ -616,7 +758,7 @@ const handleSave = async () => {
               className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
               style={{ background: "linear-gradient(135deg, #10b981, #3b82f6)", color: "white" }}
             >
-              {getCurrentUser()?._id ? (uploaderInitial) : "?"}
+              {currentUser ? uploaderInitial : "?"}
             </div>
             <div className="flex-1 relative">
               <textarea
@@ -641,7 +783,7 @@ const handleSave = async () => {
               />
               <button
                 onClick={handleCommentSubmit}
-                disabled={!commentText.trim()}
+                disabled={!commentText.trim() || commentPosting}
                 className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-lg flex items-center justify-center transition-all hover:scale-110 disabled:cursor-not-allowed"
                 style={{
                   background: commentText.trim() ? "rgba(16,185,129,0.2)" : "transparent",

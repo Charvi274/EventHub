@@ -10,23 +10,21 @@ interface DashboardProps {
   };
 }
 
-// ── Backend shape ────────────────────────────────────────────────────────────
 interface BackendEvent {
   _id: string;
   title: string;
   category: string;
   organizer: string;
-  startDate: string;   // ISO string
+  startDate: string;
   location?: string;
   coverImage?: string;
 }
 
-// ── UI shapes ────────────────────────────────────────────────────────────────
 interface RecentEvent {
   id: string;
   name: string;
   category: string;
-  date: string;        // "May 28, 2025"
+  date: string;
   photos: number;
   image: string;
   organizer: string;
@@ -35,7 +33,7 @@ interface RecentEvent {
 interface UpcomingEvent {
   id: string;
   name: string;
-  date: string;        // "Jun 15, 2025"
+  date: string;
   category: string;
   venue: string;
 }
@@ -44,7 +42,7 @@ interface UpcomingEvent {
 const FALLBACK_IMAGE =
   "https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=400&h=220&fit=crop&auto=format";
 
-const trendingPhotos = [
+const FALLBACK_TRENDING = [
   "https://images.unsplash.com/photo-1523580494863-6f3031224c94?w=300&h=200&fit=crop&auto=format",
   "https://images.unsplash.com/photo-1517457373958-b7bdd4587205?w=300&h=200&fit=crop&auto=format",
   "https://images.unsplash.com/photo-1505236858219-8359eb29e329?w=300&h=200&fit=crop&auto=format",
@@ -67,9 +65,6 @@ const categoryColors: Record<string, string> = {
   Other: "#6b7fa3",
 };
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-/** "2025-05-28T00:00:00.000Z" → "May 28, 2025" */
 function formatDisplayDate(iso: string): string {
   return new Date(iso).toLocaleDateString("en-US", {
     month: "short",
@@ -78,39 +73,41 @@ function formatDisplayDate(iso: string): string {
   });
 }
 
-/** "2025-05-28T..." → "2025-05-28" */
 function toDateOnly(iso: string): string {
   return iso.split("T")[0];
+}
+
+function getToken(): string {
+  return localStorage.getItem("token") || sessionStorage.getItem("token") || "";
 }
 
 // ── Component ────────────────────────────────────────────────────────────────
 export function Dashboard({ onNavigate, user }: DashboardProps) {
   const role = user?.role?.trim() || "Viewer";
 
-  // fetched data
-  const [allEvents, setAllEvents]     = useState<BackendEvent[]>([]);
-  const [loading, setLoading]         = useState(true);
+  // events (existing)
+  const [allEvents, setAllEvents] = useState<BackendEvent[]>([]);
+  const [loading, setLoading]     = useState(true);
 
-  // ── Fetch ──────────────────────────────────────────────────────────────────
+  // new stats from media + users APIs
+  const [totalMedia,    setTotalMedia]    = useState<number | null>(null);
+  const [totalUsers,    setTotalUsers]    = useState<number | null>(null);
+  const [trendingPhotos, setTrendingPhotos] = useState<string[]>(FALLBACK_TRENDING);
+  // per-event photo counts: { [eventId]: number }
+  const [eventPhotoCounts, setEventPhotoCounts] = useState<Record<string, number>>({});
+
+  // ── Fetch events ───────────────────────────────────────────────────────────
   useEffect(() => {
     const fetchEvents = async () => {
       try {
-        const token =
-          localStorage.getItem("token") ||
-          sessionStorage.getItem("token") ||
-          "";
-
         const res = await fetch("/api/events", {
           headers: {
             "Content-Type": "application/json",
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            Authorization: `Bearer ${getToken()}`,
           },
         });
-
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
+        if (!res.ok) throw new Error();
         const data = await res.json();
-
         const raw: BackendEvent[] = Array.isArray(data)
           ? data
           : Array.isArray(data.data)
@@ -118,17 +115,76 @@ export function Dashboard({ onNavigate, user }: DashboardProps) {
           : Array.isArray(data.events)
           ? data.events
           : [];
-
         setAllEvents(raw);
       } catch {
-        // silently fall through — UI renders with empty state
+        // silently degrade
       } finally {
         setLoading(false);
       }
     };
-
     fetchEvents();
   }, []);
+
+  // ── Fetch media stats + trending + user count ──────────────────────────────
+  useEffect(() => {
+    const headers = {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${getToken()}`,
+    };
+
+    // Total media count — GET /api/media?limit=1 returns total in response
+    fetch("/api/media?limit=1", { headers })
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => { if (data?.total != null) setTotalMedia(data.total); })
+      .catch(() => {});
+
+    // Trending media — top 6 by most liked
+    // getAllMedia supports sortBy and order params
+    fetch("/api/media?limit=6&sortBy=likes.count&order=desc", { headers })
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        const list = Array.isArray(data?.data) ? data.data : [];
+        const urls: string[] = list
+          .filter((m: { fileType: string }) => m.fileType === "image")
+          .map((m: { fileUrl: string }) => m.fileUrl);
+        if (urls.length > 0) setTrendingPhotos(urls);
+      })
+      .catch(() => {});
+
+    // Total users — GET /api/users/count (one new endpoint, see backend change above)
+    fetch("/api/auth/users/count", { headers })
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => { if (data?.count != null) setTotalUsers(data.count); })
+      .catch(() => {}); // gracefully stays "—" if endpoint doesn't exist yet
+  }, []);
+
+  // ── Fetch per-event photo counts for the 3 most recent events ─────────────
+  // Runs after allEvents is populated
+  useEffect(() => {
+    if (allEvents.length === 0) return;
+    const headers = {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${getToken()}`,
+    };
+
+    // Take the 3 most recent events and fetch their media counts
+    const recentIds = [...allEvents]
+      .sort((a, b) => b.startDate.localeCompare(a.startDate))
+      .slice(0, 3)
+      .map((e) => e._id);
+
+    recentIds.forEach((id) => {
+      // GET /api/media/event/:eventId?limit=1 — returns total in response
+      fetch(`/api/media/event/${id}?limit=1`, { headers })
+        .then((r) => r.ok ? r.json() : null)
+        .then((data) => {
+          if (data?.total != null) {
+            setEventPhotoCounts((prev) => ({ ...prev, [id]: data.total }));
+          }
+        })
+        .catch(() => {});
+    });
+  }, [allEvents]);
 
   // ── Derived data ───────────────────────────────────────────────────────────
   const today = new Date().toISOString().split("T")[0];
@@ -139,7 +195,6 @@ export function Dashboard({ onNavigate, user }: DashboardProps) {
 
   const pastRaw = allEvents.filter((e) => toDateOnly(e.startDate) <= today);
 
-  // Stats: Total Events / Upcoming / Past / (Photos placeholder until media API)
   const statsData = [
     {
       label: "Total Events",
@@ -149,29 +204,28 @@ export function Dashboard({ onNavigate, user }: DashboardProps) {
       color: "#3b82f6",
     },
     {
-      label: "Upcoming Events",
-      value: upcomingRaw.length.toLocaleString(),
-      change: `${upcomingRaw.length} ahead`,
+      label: "Total Media",
+      value: totalMedia != null ? totalMedia.toLocaleString() : "—",
+      change: totalMedia != null ? `${totalMedia} files` : "loading",
       icon: Image,
       color: "#10b981",
     },
     {
-      label: "Past Events",
-      value: pastRaw.length.toLocaleString(),
-      change: `${pastRaw.length} done`,
+      label: "Upcoming Events",
+      value: upcomingRaw.length.toLocaleString(),
+      change: `${upcomingRaw.length} ahead`,
       icon: Video,
       color: "#8b5cf6",
     },
     {
       label: "Total Users",
-      value: "—",
-      change: "coming soon",
+      value: totalUsers != null ? totalUsers.toLocaleString() : "—",
+      change: totalUsers != null ? `${totalUsers} members` : "coming soon",
       icon: Users,
       color: "#f59e0b",
     },
   ];
 
-  // Recent Events: last 3 by startDate (desc)
   const recentEvents: RecentEvent[] = [...allEvents]
     .sort((a, b) => b.startDate.localeCompare(a.startDate))
     .slice(0, 3)
@@ -180,12 +234,11 @@ export function Dashboard({ onNavigate, user }: DashboardProps) {
       name: e.title,
       category: e.category,
       date: formatDisplayDate(e.startDate),
-      photos: 0,   // media not tracked yet
+      photos: eventPhotoCounts[e._id] ?? 0,   // real count once fetched
       image: e.coverImage?.trim() ? e.coverImage : FALLBACK_IMAGE,
       organizer: e.organizer,
     }));
 
-  // Upcoming: next 4 future events
   const upcomingEvents: UpcomingEvent[] = upcomingRaw.slice(0, 4).map((e) => ({
     id: e._id,
     name: e.title,
@@ -203,7 +256,6 @@ export function Dashboard({ onNavigate, user }: DashboardProps) {
   ];
   const visibleActions = allActions.filter((a) => a.roles.includes(role));
 
-  // ── Skeleton shown while loading ───────────────────────────────────────────
   if (loading) {
     return (
       <div className="p-6 flex flex-col items-center justify-center" style={{ minHeight: 320 }}>
@@ -245,7 +297,7 @@ export function Dashboard({ onNavigate, user }: DashboardProps) {
         </div>
       </div>
 
-      {/* Stats — driven by fetched data */}
+      {/* Stats */}
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
         {statsData.map(({ label, value, change, icon: Icon, color }) => (
           <div
@@ -372,7 +424,6 @@ export function Dashboard({ onNavigate, user }: DashboardProps) {
                         color: categoryColors[event.category] || "#10b981",
                       }}
                     >
-                      {/* "Jun 15, 2025" → day + month */}
                       <span>{event.date.split(" ")[1].replace(",", "")}</span>
                       <span style={{ fontSize: 9 }}>{event.date.split(" ")[0]}</span>
                     </div>
@@ -390,7 +441,7 @@ export function Dashboard({ onNavigate, user }: DashboardProps) {
         </div>
       </div>
 
-      {/* Trending media — hardcoded, unchanged */}
+      {/* Trending media — now from backend, falls back to Unsplash if empty */}
       <div>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-base font-semibold text-white flex items-center gap-2">
@@ -401,14 +452,19 @@ export function Dashboard({ onNavigate, user }: DashboardProps) {
           </button>
         </div>
         <div className="grid grid-cols-3 lg:grid-cols-6 gap-2">
-          {trendingPhotos.map((src, i) => (
+          {trendingPhotos.slice(0, 6).map((src, i) => (
             <div
               key={i}
               className="relative group rounded-xl overflow-hidden cursor-pointer"
               style={{ aspectRatio: "3/2", background: "#0b1220" }}
               onClick={() => onNavigate("photodetails")}
             >
-              <img src={src} alt={`Trending ${i + 1}`} className="w-full h-full object-cover" />
+              <img
+                src={src}
+                alt={`Trending ${i + 1}`}
+                className="w-full h-full object-cover"
+                onError={(e) => { (e.currentTarget as HTMLImageElement).src = FALLBACK_TRENDING[i] || FALLBACK_IMAGE; }}
+              />
               <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all duration-200 flex items-center justify-center opacity-0 group-hover:opacity-100">
                 <Heart size={18} color="white" />
               </div>

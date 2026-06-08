@@ -12,6 +12,7 @@ const connectDB = require("./config/db");
 const eventRoutes = require("./routes/eventRoutes");
 const mediaRoutes = require("./routes/mediaRoutes");
 // Load environment variables FIRST (before anything else)
+const commentRoutes = require("./routes/commentRoutes");
 
 // const result = dotenv.config();
 // console.log(result);
@@ -48,6 +49,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use("/api/auth", require("./routes/authRoutes"));
 app.use("/api/events", eventRoutes);
 app.use("/api/media", mediaRoutes);
+app.use("/api/comments", commentRoutes);
 // Root health check
 app.get("/", (req, res) => {
   res.json({

@@ -160,5 +160,15 @@ const getMe = async (req, res) => {
     });
   }
 };
-
-module.exports = { signup, login, getMe };
+// @route   GET /api/users/count
+// @access  Private
+const getUserCount = async (req, res) => {
+  try {
+    const count = await User.countDocuments({ isActive: true });
+    return res.status(200).json({ success: true, count });
+  } catch (error) {
+    console.error("getUserCount error:", error);
+    return res.status(500).json({ success: false, message: "Server error." });
+  }
+};
+module.exports = { signup, login, getMe, getUserCount };

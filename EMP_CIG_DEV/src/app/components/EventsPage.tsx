@@ -366,7 +366,7 @@ function EventCard({
   upcoming = false,
 }: {
   event: UIEvent;
-  onNavigate: (s: string) => void;
+  onNavigate: (s: string, media?: undefined, eventId?: string) => void;
   upcoming?: boolean;
 }) {
   const color = categoryColors[event.category] || "#10b981";
@@ -384,7 +384,7 @@ function EventCard({
         border: `1px solid ${upcoming ? "rgba(16,185,129,0.2)" : "rgba(16,185,129,0.08)"}`,
         boxShadow: upcoming ? "0 0 0 1px rgba(16,185,129,0.05)" : "none",
       }}
-      onClick={() => onNavigate("eventdetails")}
+      onClick={() => onNavigate("eventdetails", undefined, event.id)}
     >
       {/* Image */}
       <div className="relative overflow-hidden" style={{ height: 160 }}>
