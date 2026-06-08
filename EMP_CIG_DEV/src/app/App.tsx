@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { LoginPage } from "./components/LoginPage";
 import { Sidebar } from "./components/Sidebar";
 import { Navbar } from "./components/Navbar";
@@ -8,6 +8,7 @@ import { CreateEvent } from "./components/CreateEvent";
 import { EventDetails } from "./components/EventDetails";
 import { MediaUpload } from "./components/MediaUpload";
 import { Gallery } from "./components/Gallery";
+import type { BackendMedia } from "./components/Gallery";
 import { PhotoDetails } from "./components/PhotoDetails";
 import { MyPhotos } from "./components/MyPhotos";
 import { FavoritesPage } from "./components/FavoritesPage";
@@ -48,18 +49,74 @@ const screenTitles: Record<Screen, string> = {
   watermark: "Watermark Settings",
 };
 
+// ─── Session helpers ───────────────────────────────────────────────────────────
+
+function restoreSession(): { token: string; user: Record<string, unknown> } | null {
+  // Check localStorage first (Remember Me), then sessionStorage (tab-only session)
+  for (const storage of [localStorage, sessionStorage]) {
+    try {
+      const token = storage.getItem("token");
+      const userRaw = storage.getItem("user");
+      if (token && userRaw) {
+        return { token, user: JSON.parse(userRaw) };
+      }
+    } catch {
+      storage.removeItem("token");
+      storage.removeItem("user");
+    }
+  }
+  return null;
+}
+
+function clearSession() {
+  localStorage.removeItem("token");
+  localStorage.removeItem("user");
+  sessionStorage.removeItem("token");
+  sessionStorage.removeItem("user");
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+
 export default function App() {
   const [loggedIn, setLoggedIn] = useState(false);
+  const [authToken, setAuthToken] = useState<string>("");
+  const [currentUser, setCurrentUser] = useState<Record<string, unknown>>({});
   const [currentScreen, setCurrentScreen] = useState<Screen>("dashboard");
   const [darkMode, setDarkMode] = useState(true);
   const [history, setHistory] = useState<Screen[]>([]);
+  const [selectedMedia, setSelectedMedia] = useState<BackendMedia | null>(null);
 
-  const handleLogin = (_role: string) => setLoggedIn(true);
+  // Restore session on mount (handles page refresh)
+  useEffect(() => {
+    const session = restoreSession();
+    if (session) {
+      setAuthToken(session.token);
+      setCurrentUser(session.user);
+      setLoggedIn(true);
+    }
+  }, []);
 
-  const navigate = (screen: string) => {
-    setHistory((h) => [...h, currentScreen]);
-    setCurrentScreen(screen as Screen);
+  const handleLogin = (_role: string, token: string, user: Record<string, unknown>) => {
+    setAuthToken(token);
+    setCurrentUser(user);
+    setLoggedIn(true);
   };
+
+  const handleLogout = () => {
+    clearSession();
+    setAuthToken("");
+    setCurrentUser({});
+    setLoggedIn(false);
+    setCurrentScreen("dashboard");
+    setHistory([]);
+  };
+
+  const navigate = (screen: string, media?: BackendMedia) => {
+  if (media) setSelectedMedia(media);
+
+  setHistory((h) => [...h, currentScreen]);
+  setCurrentScreen(screen as Screen);
+};
 
   const goBack = () => {
     const prev = history[history.length - 1];
@@ -78,11 +135,11 @@ export default function App() {
   const renderScreen = () => {
     switch (currentScreen) {
       case "dashboard":
-        return <Dashboard onNavigate={navigate} />;
+        return <Dashboard onNavigate={navigate} user={currentUser as { name?: string; email?: string; role?: string }} />;
       case "events":
-        return <EventsPage onNavigate={navigate} />;
+        return <EventsPage onNavigate={navigate} user={currentUser as { name?: string; email?: string; role?: string }} />;
       case "createevent":
-        return <CreateEvent onBack={goBack} onCreated={() => navigate("eventdetails")} />;
+        return <CreateEvent onBack={goBack} onCreated={() => navigate("eventdetails")} user={currentUser as { name?: string; email?: string; role?: string }} />;
       case "eventdetails":
         return <EventDetails onBack={goBack} onNavigate={navigate} />;
       case "gallery":
@@ -92,11 +149,17 @@ export default function App() {
       case "myphotos":
         return <MyPhotos />;
       case "favorites":
-        return <FavoritesPage />;
+        return <FavoritesPage onNavigate={navigate} />;
       case "photodetails":
-        return <PhotoDetails onBack={goBack} />;
+  return selectedMedia ? (
+    <PhotoDetails
+      media={selectedMedia}
+      onBack={goBack}
+      onDeleted={goBack}
+    />
+  ) : null;
       case "profile":
-        return <Profile onNavigate={navigate} />;
+        return <Profile onNavigate={navigate} user={currentUser as { name?: string; email?: string; role?: string }} />;
       case "settings":
         return <SettingsPage />;
       case "watermark":
@@ -104,19 +167,26 @@ export default function App() {
       case "notifications":
         return <NotificationsScreen />;
       default:
-        return <Dashboard onNavigate={navigate} />;
+        return <Dashboard onNavigate={navigate} user={currentUser as { name?: string; email?: string; role?: string }} />;
     }
   };
 
   return (
     <div className="min-h-screen flex" style={{ background: "#04070f" }}>
-      <Sidebar currentScreen={currentScreen} onNavigate={navigate} />
+      <Sidebar
+        currentScreen={currentScreen}
+        onNavigate={navigate}
+        onLogout={handleLogout}
+        user={currentUser}
+      />
       <div className="flex-1 ml-64">
         {!isFullWidth && (
           <Navbar
             title={screenTitles[currentScreen] || "EventHub"}
             darkMode={darkMode}
             onToggleDark={() => setDarkMode(!darkMode)}
+            user={currentUser}
+            onLogout={handleLogout}
           />
         )}
         <main className="min-h-screen" style={{ paddingTop: isFullWidth ? 0 : 64 }}>

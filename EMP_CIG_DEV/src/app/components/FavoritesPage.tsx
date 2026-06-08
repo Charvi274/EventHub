@@ -1,8 +1,21 @@
-import { useState } from "react";
+// AFTER
+import { useState, useEffect } from "react";
 import { Heart, Bookmark, Download, Share2, X, Clock, Camera, Star, Image, Video } from "lucide-react";
+import type { BackendMedia } from "./Gallery";
+// ── Types ────────────────────────────────────────────────────────────────────
+
+// interface BackendMedia {
+//   _id: string;
+//   title: string;
+//   fileUrl: string;
+//   fileType: "image" | "video";
+//   createdAt: string;
+//   likes: { count: number };
+//   eventId?: { _id: string; title: string; startDate?: string };
+// }
 
 interface FavoriteItem {
-  id: number;
+  id: string;
   src: string;
   type: "photo" | "video";
   event: string;
@@ -11,34 +24,139 @@ interface FavoriteItem {
   savedAt: string;
 }
 
-const favorites: FavoriteItem[] = [
-  { id: 1, src: "https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=400&h=280&fit=crop&auto=format", type: "photo", event: "Tech Fest 2025", date: "May 28", likes: 342, savedAt: "2 hours ago" },
-  { id: 2, src: "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=400&h=360&fit=crop&auto=format", type: "photo", event: "Cultural Night", date: "May 15", likes: 891, savedAt: "5 hours ago" },
-  { id: 3, src: "https://images.unsplash.com/photo-1517457373958-b7bdd4587205?w=400&h=280&fit=crop&auto=format", type: "video", event: "Sports Meet", date: "May 10", likes: 567, savedAt: "Yesterday" },
-  { id: 4, src: "https://images.unsplash.com/photo-1505236858219-8359eb29e329?w=400&h=300&fit=crop&auto=format", type: "photo", event: "Cultural Night", date: "May 15", likes: 723, savedAt: "Yesterday" },
-  { id: 5, src: "https://images.unsplash.com/photo-1523580494863-6f3031224c94?w=400&h=280&fit=crop&auto=format", type: "photo", event: "Convocation 2025", date: "Apr 20", likes: 234, savedAt: "2 days ago" },
-  { id: 6, src: "https://images.unsplash.com/photo-1511578314322-379afb476865?w=400&h=340&fit=crop&auto=format", type: "photo", event: "Annual Day", date: "Apr 10", likes: 445, savedAt: "3 days ago" },
-  { id: 7, src: "https://images.unsplash.com/photo-1524178232363-1fb2b075b655?w=400&h=260&fit=crop&auto=format", type: "video", event: "Tech Workshop", date: "Mar 25", likes: 312, savedAt: "1 week ago" },
-  { id: 8, src: "https://images.unsplash.com/photo-1501281668745-f7f57925c3b4?w=400&h=300&fit=crop&auto=format", type: "photo", event: "Freshers Night", date: "Aug 10", likes: 678, savedAt: "1 week ago" },
-];
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
-export function FavoritesPage() {
-  const [items, setItems] = useState(favorites);
+function getToken(): string {
+  return localStorage.getItem("token") || sessionStorage.getItem("token") || "";
+}
+
+function mapToFavorite(m: BackendMedia): FavoriteItem {
+  return {
+    id: m._id,
+    src: m.fileUrl,
+    type: m.fileType === "video" ? "video" : "photo",
+    event: m.eventId?.title ?? "Unknown Event",
+    date: m.eventId?.startDate
+      ? new Date(m.eventId.startDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+      : new Date(m.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+    likes: m.likes?.count ?? 0,
+    savedAt: (() => {
+      const diff = Date.now() - new Date(m.createdAt).getTime();
+      const h = Math.floor(diff / 3600000);
+      if (h < 1) return "Just now";
+      if (h < 24) return `${h} hour${h > 1 ? "s" : ""} ago`;
+      const d = Math.floor(h / 24);
+      if (d === 1) return "Yesterday";
+      if (d < 7) return `${d} days ago`;
+      return `${Math.floor(d / 7)} week${Math.floor(d / 7) > 1 ? "s" : ""} ago`;
+    })(),
+  };
+}
+
+// AFTER
+async function downloadFile(
+  mediaId: string,
+  fallbackUrl: string,
+  fallbackName: string,
+  delayMs = 0,
+): Promise<void> {
+  if (delayMs > 0) await new Promise((r) => setTimeout(r, delayMs));
+  try {
+    // 1. Tell backend to record the download and get the URL
+    const res = await fetch(`/api/media/${mediaId}/download`, {
+      headers: { Authorization: `Bearer ${getToken()}` },
+    });
+    if (!res.ok) throw new Error();
+    const data = await res.json();
+
+    // 2. Fetch as blob so the browser saves the file instead of opening a new tab
+    //    (cross-origin <a download> is ignored without this)
+    const fileRes = await fetch(data.fileUrl);
+    if (!fileRes.ok) throw new Error();
+    const blob = await fileRes.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = objectUrl;
+    anchor.download = data.fileName ?? fallbackName;
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    // Small delay before revoking so the browser has time to start the download
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 10_000);
+  } catch {
+    window.open(fallbackUrl, "_blank");
+  }
+}
+// ── Component ─────────────────────────────────────────────────────────────────
+interface FavoritesPageProps {
+  onNavigate: (screen: string, media?: BackendMedia) => void;
+}
+export function FavoritesPage({ onNavigate }: FavoritesPageProps) {
+  const [items, setItems] = useState<FavoriteItem[]>([]);
+  const [rawItems, setRawItems] = useState<BackendMedia[]>([]);
+  const [loading, setLoading] = useState(true);
+  // const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"all" | "photos" | "videos">("all");
-  const [removingId, setRemovingId] = useState<number | null>(null);
+  const [removingId, setRemovingId] = useState<string | null>(null);
+  const [downloadingAll, setDownloadingAll] = useState(false);
+  useEffect(() => {
+    fetch("/api/media/saved", {
+      headers: { Authorization: `Bearer ${getToken()}` },
+    })
+      .then((r) => r.ok ? r.json() : Promise.reject())
+      .then((data) => {
+        const list: BackendMedia[] = Array.isArray(data.data) ? data.data : [];
+        setItems(list.map(mapToFavorite));
+        setRawItems(list);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+  // AFTER
+  const displayed = items.filter(
+    (i) => activeTab === "all" || i.type === (activeTab.slice(0, -1) as "photo" | "video")
+  );
 
-  const handleRemove = (id: number) => {
+  const handleDownloadAll = async () => {
+    if (downloadingAll || displayed.length === 0) return;
+    setDownloadingAll(true);
+    // Browsers block rapid-fire programmatic downloads — stagger by 800ms each
+    for (let i = 0; i < displayed.length; i++) {
+      const item = displayed[i];
+      await downloadFile(item.id, item.src, `${item.event}.jpg`, i * 800);
+    }
+    setDownloadingAll(false);
+  };
+  const handleRemove = async (id: string) => {
     setRemovingId(id);
+    try {
+      await fetch(`/api/media/${id}/save`, {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${getToken()}` },
+      });
+    } catch {
+      // silently degrade
+    }
     setTimeout(() => {
       setItems((prev) => prev.filter((i) => i.id !== id));
       setRemovingId(null);
     }, 300);
   };
 
-  const displayed = items.filter((i) => activeTab === "all" || i.type === activeTab.slice(0, -1) as "photo" | "video");
-
+  
   const photoCount = items.filter((i) => i.type === "photo").length;
   const videoCount = items.filter((i) => i.type === "video").length;
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center" style={{ minHeight: 320 }}>
+        <div
+          className="w-8 h-8 rounded-full border-2 border-t-transparent animate-spin"
+          style={{ borderColor: "rgba(245,158,11,0.4)", borderTopColor: "transparent" }}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-5">
@@ -52,24 +170,24 @@ export function FavoritesPage() {
             {photoCount} photos · {videoCount} videos saved
           </p>
         </div>
-        {items.length > 0 && (
-          <div className="flex gap-2">
-            <button
-              className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm transition-all hover:bg-white/5"
-              style={{ border: "1px solid rgba(16,185,129,0.15)", color: "#6b7fa3" }}
-            >
-              <Download size={14} /> Download All
-            </button>
-            <button
-              className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm transition-all hover:bg-white/5"
-              style={{ border: "1px solid rgba(16,185,129,0.15)", color: "#6b7fa3" }}
-            >
-              <Share2 size={14} /> Share Collection
-            </button>
-          </div>
-        )}
-      </div>
-
+<div className="flex gap-2">
+  <button
+    onClick={handleDownloadAll}
+    disabled={downloadingAll || displayed.length === 0}
+    className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm transition-all hover:bg-white/5 disabled:opacity-50 disabled:cursor-not-allowed"
+    style={{ border: "1px solid rgba(16,185,129,0.15)", color: "#6b7fa3" }}
+  >
+    <Download size={14} />
+    {downloadingAll ? "Downloading…" : "Download All"}
+  </button>
+  <button
+    className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm transition-all hover:bg-white/5"
+    style={{ border: "1px solid rgba(16,185,129,0.15)", color: "#6b7fa3" }}
+  >
+    <Share2 size={14} /> Share Collection
+  </button>
+</div>
+</div>
       {/* Stats row */}
       <div className="grid grid-cols-3 gap-3">
         {[
@@ -112,8 +230,8 @@ export function FavoritesPage() {
         ))}
       </div>
 
-      {/* Section: Recently favorited */}
-      {activeTab === "all" && (
+      {/* Recently favorited banner */}
+      {activeTab === "all" && items.length > 0 && (
         <div
           className="flex items-center gap-3 px-4 py-2.5 rounded-xl"
           style={{ background: "rgba(245,158,11,0.05)", border: "1px solid rgba(245,158,11,0.15)" }}
@@ -131,14 +249,17 @@ export function FavoritesPage() {
           {displayed.map((item) => (
             <div
               key={item.id}
-              className="relative group rounded-xl overflow-hidden break-inside-avoid transition-all duration-300"
+              className="relative group rounded-xl overflow-hidden break-inside-avoid transition-all duration-300 cursor-pointer"
               style={{
                 opacity: removingId === item.id ? 0 : 1,
                 transform: removingId === item.id ? "scale(0.95)" : "scale(1)",
                 background: "#0b1220",
               }}
+              onClick={() => {
+                const raw = rawItems.find((r) => r._id === item.id);
+                if (raw) onNavigate("photodetails", raw);
+              }}
             >
-              {/* Video badge */}
               {item.type === "video" && (
                 <div
                   className="absolute top-2 left-2 z-10 flex items-center gap-1 px-2 py-0.5 rounded-full text-xs"
@@ -148,11 +269,17 @@ export function FavoritesPage() {
                 </div>
               )}
 
-              <img src={item.src} alt={item.event} className="w-full object-cover" />
+              <img
+                src={item.src}
+                alt={item.event}
+                className="w-full object-cover"
+                onError={(e) => {
+                  (e.currentTarget as HTMLImageElement).src =
+                    "https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=400&h=280&fit=crop&auto=format";
+                }}
+              />
 
-              {/* Hover overlay */}
               <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/0 to-black/30 opacity-0 group-hover:opacity-100 transition-all duration-200">
-                {/* Remove button */}
                 <button
                   onClick={() => handleRemove(item.id)}
                   className="absolute top-2 right-2 w-7 h-7 rounded-lg flex items-center justify-center transition-all hover:scale-110"
@@ -162,12 +289,10 @@ export function FavoritesPage() {
                   <X size={13} color="#f87171" />
                 </button>
 
-                {/* Saved indicator */}
                 <div className="absolute top-2 left-2 w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: "rgba(245,158,11,0.2)", backdropFilter: "blur(4px)" }}>
                   <Bookmark size={13} color="#f59e0b" fill="#f59e0b" />
                 </div>
 
-                {/* Bottom info */}
                 <div className="absolute bottom-0 left-0 right-0 p-3">
                   <p className="text-xs font-medium text-white mb-1 truncate">{item.event}</p>
                   <div className="flex items-center justify-between">
@@ -177,7 +302,7 @@ export function FavoritesPage() {
                     </div>
                     <div className="flex gap-1">
                       <button
-                        onClick={(e) => e.stopPropagation()}
+                        onClick={(e) => { e.stopPropagation(); downloadFile(item.id, item.src, `${item.event}.jpg`); }}
                         className="w-6 h-6 rounded-md flex items-center justify-center"
                         style={{ background: "rgba(0,0,0,0.4)" }}
                       >

@@ -303,7 +303,65 @@ const downloadMedia = async (req, res) => {
     return res.status(500).json({ success: false, message: "Server error during download." });
   }
 };
+// ─────────────────────────────────────────────
+// @desc    Save / Unsave media (toggle)
+// @route   PUT /api/media/:id/save
+// @access  All authenticated users
+// ─────────────────────────────────────────────
+const saveMedia = async (req, res) => {
+  try {
+    const media = await Media.findById(req.params.id);
+    if (!media) {
+      return res.status(404).json({ success: false, message: "Media not found." });
+    }
 
+    const userId = req.user._id.toString();
+    const alreadySaved = media.savedBy.some((id) => id.toString() === userId);
+
+    if (alreadySaved) {
+      media.savedBy = media.savedBy.filter((id) => id.toString() !== userId);
+    } else {
+      media.savedBy.push(req.user._id);
+    }
+
+    await media.save();
+
+    return res.status(200).json({
+      success: true,
+      message: alreadySaved ? "Removed from favorites." : "Added to favorites.",
+      saved: !alreadySaved,
+    });
+  } catch (error) {
+    if (error.name === "CastError") {
+      return res.status(400).json({ success: false, message: "Invalid media ID format." });
+    }
+    console.error("saveMedia error:", error);
+    return res.status(500).json({ success: false, message: "Server error while saving media." });
+  }
+};
+
+// ─────────────────────────────────────────────
+// @desc    Get all media saved by current user
+// @route   GET /api/media/saved
+// @access  All authenticated users
+// ─────────────────────────────────────────────
+const getSavedMedia = async (req, res) => {
+  try {
+    const mediaList = await Media.find({ savedBy: req.user._id })
+      .populate("uploadedBy", "name email role")
+      .populate("eventId", "title category startDate")
+      .sort({ createdAt: -1 });
+
+    return res.status(200).json({
+      success: true,
+      total: mediaList.length,
+      data: mediaList,
+    });
+  } catch (error) {
+    console.error("getSavedMedia error:", error);
+    return res.status(500).json({ success: false, message: "Server error while fetching saved media." });
+  }
+};
 module.exports = {
   uploadMedia,
   getAllMedia,
@@ -311,4 +369,6 @@ module.exports = {
   deleteMedia,
   likeMedia,
   downloadMedia,
+  saveMedia,       
+  getSavedMedia,   
 };

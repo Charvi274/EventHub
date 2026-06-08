@@ -2,16 +2,19 @@
 // ─────────────────────────────────────────────
 //  EventHub – Express Server Entry Point
 // ─────────────────────────────────────────────
+const dotenv = require("dotenv");
+dotenv.config();
 
 const express = require("express");
 const cors = require("cors");
-const dotenv = require("dotenv");
+// const dotenv = require("dotenv");
 const connectDB = require("./config/db");
 const eventRoutes = require("./routes/eventRoutes");
 const mediaRoutes = require("./routes/mediaRoutes");
 // Load environment variables FIRST (before anything else)
-dotenv.config();
 
+// const result = dotenv.config();
+// console.log(result);
 // Connect to MongoDB
 connectDB();
 

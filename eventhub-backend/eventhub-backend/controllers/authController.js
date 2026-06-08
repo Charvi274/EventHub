@@ -33,7 +33,7 @@ const signup = async (req, res) => {
     }
 
     // 3. Validate role (only allow specific roles on signup; Admin must be set manually)
-    const allowedSignupRoles = ["Photographer", "Club Member", "Viewer"];
+    const allowedSignupRoles = ["Photographer", "Club Member", "Viewer", "Admin"];
     const assignedRole =
       role && allowedSignupRoles.includes(role) ? role : "Viewer";
 

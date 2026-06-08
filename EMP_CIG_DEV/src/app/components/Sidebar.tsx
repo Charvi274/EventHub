@@ -3,22 +3,24 @@ import { Camera, LayoutDashboard, Calendar, Image, Upload, Star, Bell, User, Set
 interface SidebarProps {
   currentScreen: string;
   onNavigate: (screen: string) => void;
+  onLogout: () => void;
+  user: Record<string, unknown>;
 }
 
 const navItems = [
-  { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { id: "events", label: "Events", icon: Calendar },
-  { id: "gallery", label: "Gallery", icon: Image },
-  { id: "upload", label: "Upload Media", icon: Upload },
-  { id: "myphotos", label: "My Photos", icon: Camera },
-  { id: "favorites", label: "Favorites", icon: Star },
-  { id: "notifications", label: "Notifications", icon: Bell, badge: 5 },
+  { id: "dashboard",     label: "Dashboard",    icon: LayoutDashboard, roles: ["Admin", "Photographer", "Club Member", "Viewer"] },
+  { id: "events",        label: "Events",        icon: Calendar,        roles: ["Admin", "Photographer", "Club Member", "Viewer"] },
+  { id: "gallery",       label: "Gallery",       icon: Image,           roles: ["Admin", "Photographer", "Club Member", "Viewer"] },
+  { id: "upload",        label: "Upload Media",  icon: Upload,          roles: ["Admin", "Photographer"] },
+  { id: "myphotos",      label: "My Photos",     icon: Camera,          roles: ["Admin", "Photographer", "Club Member", "Viewer"] },
+  { id: "favorites",     label: "Favorites",     icon: Star,            roles: ["Admin", "Photographer", "Club Member", "Viewer"] },
+  { id: "notifications", label: "Notifications", icon: Bell, badge: 5,  roles: ["Admin", "Photographer", "Club Member", "Viewer"] },
 ];
 
 const bottomNav = [
-  { id: "watermark", label: "Watermark", icon: Droplets },
-  { id: "profile", label: "Profile", icon: User },
-  { id: "settings", label: "Settings", icon: Settings },
+  { id: "watermark", label: "Watermark", icon: Droplets, roles: ["Admin"] },
+  { id: "profile",   label: "Profile",   icon: User,     roles: ["Admin", "Photographer", "Club Member", "Viewer"] },
+  { id: "settings",  label: "Settings",  icon: Settings, roles: ["Admin", "Photographer", "Club Member", "Viewer"] },
 ];
 
 function NavItem({ id, label, icon: Icon, badge, currentScreen, onNavigate }: {
@@ -70,7 +72,18 @@ function NavItem({ id, label, icon: Icon, badge, currentScreen, onNavigate }: {
   );
 }
 
-export function Sidebar({ currentScreen, onNavigate }: SidebarProps) {
+export function Sidebar({ currentScreen, onNavigate, onLogout, user }: SidebarProps) {
+  const role = typeof user?.role === "string" ? user.role : "Viewer";
+  const visibleNav    = navItems.filter((item) => item.roles.includes(role));
+  const visibleBottom = bottomNav.filter((item) => item.roles.includes(role));
+  const name = typeof user?.name === "string" ? user.name : "User";
+  const initials = name
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0].toUpperCase())
+    .join("");
+
   return (
     <aside
       className="fixed left-0 top-0 h-screen w-64 flex flex-col z-40"
@@ -95,7 +108,7 @@ export function Sidebar({ currentScreen, onNavigate }: SidebarProps) {
 
       {/* Main nav */}
       <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
-        {navItems.map((item) => (
+        {visibleNav.map((item) => (
           <NavItem key={item.id} {...item} currentScreen={currentScreen} onNavigate={onNavigate} />
         ))}
 
@@ -103,28 +116,42 @@ export function Sidebar({ currentScreen, onNavigate }: SidebarProps) {
         <div className="my-3" style={{ borderTop: "1px solid rgba(16,185,129,0.06)" }} />
 
         {/* Bottom nav items */}
-        {bottomNav.map((item) => (
+        {visibleBottom.map((item) => (
           <NavItem key={item.id} {...item} currentScreen={currentScreen} onNavigate={onNavigate} />
         ))}
       </nav>
 
       {/* User profile bottom */}
       <div className="p-3" style={{ borderTop: "1px solid rgba(16,185,129,0.08)" }}>
-        <div
-          className="flex items-center gap-3 px-3 py-3 rounded-xl cursor-pointer transition-all duration-200 hover:bg-white/5"
-          onClick={() => onNavigate("profile")}
-        >
+        <div className="flex items-center gap-3 px-3 py-3 rounded-xl transition-all duration-200 hover:bg-white/5">
+          {/* Clicking the name/avatar navigates to profile */}
           <div
-            className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0"
-            style={{ background: "linear-gradient(135deg, #10b981, #3b82f6)", color: "white" }}
+            className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer"
+            onClick={() => onNavigate("profile")}
           >
-            A
+            <div
+              className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0"
+              style={{ background: "linear-gradient(135deg, #10b981, #3b82f6)", color: "white" }}
+            >
+              {initials || "U"}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-white truncate">{name}</p>
+              {role && (
+                <p className="text-xs truncate" style={{ color: "#6b7fa3" }}>{role}</p>
+              )}
+            </div>
           </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-white truncate">Arjun Mehta</p>
-            <p className="text-xs truncate" style={{ color: "#6b7fa3" }}>Admin · Photographer</p>
-          </div>
-          <LogOut size={15} style={{ color: "#6b7fa3" }} />
+
+          {/* Logout icon — wired to onLogout */}
+          <button
+            onClick={onLogout}
+            className="flex-shrink-0 transition-colors hover:text-red-400 p-1 rounded-lg hover:bg-white/5"
+            style={{ color: "#6b7fa3" }}
+            title="Sign out"
+          >
+            <LogOut size={15} />
+          </button>
         </div>
       </div>
     </aside>

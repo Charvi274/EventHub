@@ -7,33 +7,41 @@ const {
   getEventById,
   updateEvent,
   deleteEvent,
+  uploadEventCover,
 } = require("../controllers/eventController");
 
-// ─────────────────────────────────────────────
-// Import your existing JWT auth middleware.
-// Adjust the path if your file is named differently
-// (e.g., authMiddleware.js, auth.js, protect.js)
-// ─────────────────────────────────────────────
-// const { protect } = require("../middleware/authMiddleware");
+// upload is the multer-storage-cloudinary instance already used by mediaRoutes.js
+// — confirmed from mediaController.js: const { deleteFromCloudinary } = require("../utils/uploadUtils")
+//   and your note that mediaRoutes.js does: const { upload } = require("../utils/uploadUtils")
+const { upload } = require("../utils/uploadUtils");
+
 const { protect, authorizeRoles } = require("../middleware/authMiddleware");
-// const { authorizeRoles } = require("../middleware/roleMiddleware");
+
+// ─────────────────────────────────────────────
+// Cover-image upload
+// Declared BEFORE /:id so Express does not treat
+// the literal string "cover-upload" as an :id value.
+//
+// POST /api/events/cover-upload
+// Access: Admin, ClubMember  (same roles that can create events)
+// ─────────────────────────────────────────────
+router.post(
+  "/cover-upload",
+  protect,
+  authorizeRoles("Admin", "ClubMember"),
+  upload.single("file"), // field name "file" — matches FormData.append("file", ...) in CreateEvent.tsx
+  uploadEventCover
+);
 
 // ─────────────────────────────────────────────
 // Public-facing routes (still require JWT login)
 // ─────────────────────────────────────────────
-
-// GET /api/events        → All roles can view
-// GET /api/events/:id    → All roles can view
 router.get("/", protect, getAllEvents);
 router.get("/:id", protect, getEventById);
 
 // ─────────────────────────────────────────────
 // Protected routes — Admin & ClubMember only
 // ─────────────────────────────────────────────
-
-// POST   /api/events        → Create
-// PUT    /api/events/:id    → Update
-// DELETE /api/events/:id    → Delete
 router.post("/", protect, authorizeRoles("Admin", "ClubMember"), createEvent);
 router.put("/:id", protect, authorizeRoles("Admin", "ClubMember"), updateEvent);
 router.delete("/:id", protect, authorizeRoles("Admin", "ClubMember"), deleteEvent);

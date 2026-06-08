@@ -7,7 +7,7 @@ import react from '@vitejs/plugin-react'
 function figmaAssetResolver() {
   return {
     name: 'figma-asset-resolver',
-    resolveId(id) {
+    resolveId(id: string) {
       if (id.startsWith('figma:asset/')) {
         const filename = id.replace('figma:asset/', '')
         return path.resolve(__dirname, 'src/assets', filename)
@@ -33,4 +33,16 @@ export default defineConfig({
 
   // File types to support raw imports. Never add .css, .tsx, or .ts files to this.
   assetsInclude: ['**/*.svg', '**/*.csv'],
+
+  server: {
+    proxy: {
+      // All requests starting with /api are forwarded to the Express backend.
+      // The frontend stays on http://localhost:5173 and never sees CORS issues.
+      '/api': {
+        target: 'http://localhost:5000',
+        changeOrigin: true,
+        // No rewrite needed — backend routes are already mounted at /api/...
+      },
+    },
+  },
 })

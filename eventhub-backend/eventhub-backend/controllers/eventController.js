@@ -7,6 +7,7 @@ const Event = require("../models/Event");
 // ─────────────────────────────────────────────
 const createEvent = async (req, res) => {
   try {
+    
     const {
       title,
       description,
@@ -296,10 +297,46 @@ const deleteEvent = async (req, res) => {
   }
 };
 
+
+const uploadEventCover = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: "No file uploaded. Please attach an image.",
+      });
+    }
+ 
+    // multer-storage-cloudinary writes the public Cloudinary URL to req.file.path
+    // — confirmed from mediaController.js line: fileUrl: req.file.path
+    const fileUrl = req.file.path;
+ 
+    if (!fileUrl) {
+      return res.status(500).json({
+        success: false,
+        message: "Upload succeeded but Cloudinary returned no URL.",
+      });
+    }
+ 
+    return res.status(200).json({
+      success: true,
+      message: "Cover image uploaded successfully.",
+      fileUrl, // CreateEvent.tsx reads data.fileUrl
+    });
+  } catch (error) {
+    console.error("uploadEventCover error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error during cover image upload.",
+    });
+  }
+};
+
 module.exports = {
   createEvent,
   getAllEvents,
   getEventById,
   updateEvent,
   deleteEvent,
+  uploadEventCover,
 };

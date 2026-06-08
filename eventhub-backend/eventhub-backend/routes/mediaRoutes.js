@@ -8,6 +8,8 @@ const {
   deleteMedia,
   likeMedia,
   downloadMedia,
+  saveMedia,       
+  getSavedMedia,   
 } = require("../controllers/mediaController");
 
 // ─────────────────────────────────────────────
@@ -27,6 +29,7 @@ const { upload } = require("../utils/uploadUtils");
 // ─────────────────────────────────────────────
 const handleUploadError = (err, req, res, next) => {
   if (err) {
+    console.error("UPLOAD ERROR:", err);
     return res.status(400).json({
       success: false,
       message: err.message || "File upload error.",
@@ -66,6 +69,7 @@ router.get("/:id/download", protect, downloadMedia);
 
 // DELETE /api/media/:id              → Delete media
 // Admin (any) | Photographer & ClubMember (own only)
+router.get("/saved", protect, getSavedMedia);
 router.delete(
   "/:id",
   protect,
@@ -73,4 +77,5 @@ router.delete(
   deleteMedia
 );
 
+router.put("/:id/save", protect, saveMedia);
 module.exports = router;

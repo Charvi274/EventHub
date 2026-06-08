@@ -25,12 +25,41 @@ const events = [
   { name: "Photography Contest", role: "Photographer", photos: 52, date: "Jun 25" },
 ];
 
-interface ProfilePageProps {
-  onNavigate?: (screen: string) => void;
+// ─── Role badge colour map ─────────────────────────────────────────────────────
+const roleBadge: Record<string, { bg: string; color: string; border: string }> = {
+  Admin:        { bg: "rgba(245,158,11,0.12)",  color: "#f59e0b", border: "rgba(245,158,11,0.3)"  },
+  Photographer: { bg: "rgba(139,92,246,0.10)",  color: "#a78bfa", border: "rgba(139,92,246,0.2)"  },
+  "Club Member":{ bg: "rgba(59,130,246,0.10)",  color: "#60a5fa", border: "rgba(59,130,246,0.2)"  },
+  Viewer:       { bg: "rgba(16,185,129,0.10)",  color: "#10b981", border: "rgba(16,185,129,0.2)"  },
+};
+const defaultBadge = { bg: "rgba(107,127,163,0.12)", color: "#6b7fa3", border: "rgba(107,127,163,0.2)" };
+
+// ─── Derive initials from a display name ──────────────────────────────────────
+function getInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0][0].toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
-export function Profile({ onNavigate }: ProfilePageProps) {
+interface ProfilePageProps {
+  onNavigate?: (screen: string) => void;
+  user?: {
+    name?: string;
+    email?: string;
+    role?: string;
+  };
+}
+
+export function Profile({ onNavigate, user }: ProfilePageProps) {
   const [activeTab, setActiveTab] = useState<"uploads" | "favorites" | "events">("uploads");
+
+  // ── Safe resolved values ───────────────────────────────────────────────────
+  const displayName = user?.name?.trim() || "Unknown User";
+  const displayEmail = user?.email?.trim() || "—";
+  const displayRole = user?.role?.trim() || "Viewer";
+  const initials = getInitials(displayName);
+  const badge = roleBadge[displayRole] ?? defaultBadge;
 
   return (
     <div className="p-6 space-y-6 max-w-5xl mx-auto">
@@ -42,15 +71,11 @@ export function Profile({ onNavigate }: ProfilePageProps) {
         {/* Cover */}
         <div
           className="h-40 relative"
-          style={{
-            background: "linear-gradient(135deg, #06091a 0%, #0a1a12 50%, #041510 100%)",
-          }}
+          style={{ background: "linear-gradient(135deg, #06091a 0%, #0a1a12 50%, #041510 100%)" }}
         >
           <div
             className="absolute inset-0"
-            style={{
-              backgroundImage: "radial-gradient(ellipse 80% 60% at 30% 50%, rgba(16,185,129,0.15) 0%, transparent 70%)",
-            }}
+            style={{ backgroundImage: "radial-gradient(ellipse 80% 60% at 30% 50%, rgba(16,185,129,0.15) 0%, transparent 70%)" }}
           />
           <div
             className="absolute inset-0 opacity-[0.04]"
@@ -80,7 +105,7 @@ export function Profile({ onNavigate }: ProfilePageProps) {
                   fontFamily: "'Outfit', sans-serif",
                 }}
               >
-                A
+                {initials}
               </div>
               <button
                 className="absolute -bottom-1 -right-1 w-6 h-6 rounded-lg flex items-center justify-center"
@@ -108,26 +133,21 @@ export function Profile({ onNavigate }: ProfilePageProps) {
           </div>
 
           <div>
-            <h2 className="text-xl font-bold text-white" style={{ fontFamily: "'Outfit', sans-serif" }}>Arjun Mehta</h2>
-            <p className="text-sm mb-3" style={{ color: "#6b7fa3" }}>2021CS0124 · arjun.mehta@university.edu</p>
+            <h2 className="text-xl font-bold text-white" style={{ fontFamily: "'Outfit', sans-serif" }}>
+              {displayName}
+            </h2>
+            <p className="text-sm mb-3" style={{ color: "#6b7fa3" }}>{displayEmail}</p>
             <div className="flex items-center gap-2 flex-wrap mb-3">
               <span
                 className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold"
-                style={{ background: "rgba(245,158,11,0.12)", color: "#f59e0b", border: "1px solid rgba(245,158,11,0.3)" }}
+                style={{ background: badge.bg, color: badge.color, border: `1px solid ${badge.border}` }}
               >
-                <Award size={11} /> Admin
+                <Award size={11} /> {displayRole}
               </span>
-              <span
-                className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs"
-                style={{ background: "rgba(139,92,246,0.1)", color: "#a78bfa", border: "1px solid rgba(139,92,246,0.2)" }}
-              >
-                <Camera size={11} /> Photographer
-              </span>
-              <span className="text-xs" style={{ color: "#6b7fa3" }}>Computer Science · Year 4</span>
             </div>
-            <p className="text-sm" style={{ color: "#c4cdd8", maxWidth: 500 }}>
+            {/* <p className="text-sm" style={{ color: "#c4cdd8", maxWidth: 500 }}>
               Passionate about capturing college memories. Head photographer for CSE Department events and official campus photojournalist.
-            </p>
+            </p> */}
           </div>
 
           {/* Stats */}
@@ -224,10 +244,7 @@ export function Profile({ onNavigate }: ProfilePageProps) {
                 className="flex items-center gap-4 p-4 rounded-xl cursor-pointer transition-all hover:scale-[1.005]"
                 style={{ background: "rgba(11,18,32,0.8)", border: "1px solid rgba(16,185,129,0.1)" }}
               >
-                <div
-                  className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-                  style={{ background: "rgba(16,185,129,0.1)" }}
-                >
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: "rgba(16,185,129,0.1)" }}>
                   <Calendar size={18} color="#10b981" />
                 </div>
                 <div className="flex-1 min-w-0">

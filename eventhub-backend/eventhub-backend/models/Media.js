@@ -47,13 +47,18 @@ const mediaSchema = new mongoose.Schema(
         default: 0,
         min: 0,
       },
+      
       likedBy: {
         type: [mongoose.Schema.Types.ObjectId],
         ref: "User",
         default: [],
       },
     },
-
+savedBy: {
+  type: [mongoose.Schema.Types.ObjectId],
+  ref: "User",
+  default: [],
+},
     downloads: {
       type: Number,
       default: 0,
@@ -71,7 +76,7 @@ mediaSchema.index({ uploadedBy: 1 });
 mediaSchema.index({ fileType: 1 });
 mediaSchema.index({ tags: 1 });
 mediaSchema.index({ createdAt: -1 });
-
+mediaSchema.index({ savedBy: 1 });
 const Media = mongoose.model("Media", mediaSchema);
 
 module.exports = Media;

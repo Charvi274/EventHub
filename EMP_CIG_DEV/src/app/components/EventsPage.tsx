@@ -1,26 +1,52 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Search, Filter, Plus, Clock, Camera, ChevronDown, ArrowUpDown, Calendar } from "lucide-react";
 
 interface EventsPageProps {
   onNavigate: (screen: string) => void;
+  user?: { name?: string; email?: string; role?: string };
 }
 
-const allEvents = [
-  { id: 1, name: "Annual Tech Fest 2025", category: "Technical", date: "2025-05-28", photos: 842, videos: 34, organizer: "CSE Department", image: "https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=500&h=280&fit=crop&auto=format" },
-  { id: 2, name: "Cultural Night — Spring Edition", category: "Cultural", date: "2025-05-15", photos: 1204, videos: 67, organizer: "Cultural Club", image: "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=500&h=280&fit=crop&auto=format" },
-  { id: 3, name: "Intercollege Sports Meet", category: "Sports", date: "2025-05-10", photos: 567, videos: 22, organizer: "Sports Committee", image: "https://images.unsplash.com/photo-1461896836934-ffe607ba8211?w=500&h=280&fit=crop&auto=format" },
-  { id: 4, name: "Freshers' Welcome 2025", category: "Cultural", date: "2025-06-15", photos: 0, videos: 0, organizer: "Student Council", image: "https://images.unsplash.com/photo-1501281668745-f7f57925c3b4?w=500&h=280&fit=crop&auto=format" },
-  { id: 5, name: "Robotics Workshop", category: "Workshop", date: "2025-06-20", photos: 0, videos: 0, organizer: "Robotics Club", image: "https://images.unsplash.com/photo-1517457373958-b7bdd4587205?w=500&h=280&fit=crop&auto=format" },
-  { id: 6, name: "Photography Contest", category: "Arts", date: "2025-06-25", photos: 0, videos: 0, organizer: "Photography Society", image: "https://images.unsplash.com/photo-1505236858219-8359eb29e329?w=500&h=280&fit=crop&auto=format" },
-  { id: 7, name: "Entrepreneurship Summit", category: "Academic", date: "2025-07-01", photos: 0, videos: 0, organizer: "E-Cell", image: "https://images.unsplash.com/photo-1511578314322-379afb476865?w=500&h=280&fit=crop&auto=format" },
-  { id: 8, name: "Annual Convocation 2025", category: "Academic", date: "2025-04-20", photos: 2341, videos: 12, organizer: "Administration", image: "https://images.unsplash.com/photo-1523580494863-6f3031224c94?w=500&h=280&fit=crop&auto=format" },
-  { id: 9, name: "Music & Arts Festival", category: "Cultural", date: "2025-04-05", photos: 934, videos: 41, organizer: "Arts Council", image: "https://images.unsplash.com/photo-1524178232363-1fb2b075b655?w=500&h=280&fit=crop&auto=format" },
-  { id: 10, name: "Hackathon 24H", category: "Technical", date: "2025-03-18", photos: 312, videos: 8, organizer: "CSE Department", image: "https://images.unsplash.com/photo-1527529482837-4698179dc6ce?w=500&h=280&fit=crop&auto=format" },
-  { id: 11, name: "Inter-House Cricket League", category: "Sports", date: "2025-03-05", photos: 456, videos: 18, organizer: "Sports Committee", image: "https://images.unsplash.com/photo-1550305080-4e029753abcf?w=500&h=280&fit=crop&auto=format" },
-  { id: 12, name: "AI & ML Symposium", category: "Academic", date: "2025-02-22", photos: 287, videos: 6, organizer: "AI Research Club", image: "https://images.unsplash.com/photo-1475721027785-f74eccf877e2?w=500&h=280&fit=crop&auto=format" },
-];
+// Shape returned by GET /api/events
+interface BackendEvent {
+  _id: string;
+  title: string;
+  category: string;
+  organizer: string;
+  startDate: string;
+  coverImage?: string;
+  status?: string;
+}
 
-const categories = ["All", "Technical", "Cultural", "Sports", "Academic", "Arts", "Workshop"];
+// Shape used internally by the UI (matches original hardcoded structure)
+interface UIEvent {
+  id: string;
+  name: string;
+  category: string;
+  date: string;        // "YYYY-MM-DD"
+  photos: number;
+  videos: number;
+  organizer: string;
+  image: string;
+}
+
+const FALLBACK_IMAGE =
+  "https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=500&h=280&fit=crop&auto=format";
+
+/** Map a backend event to the UI shape the existing components expect */
+function mapEvent(e: BackendEvent): UIEvent {
+  return {
+    id: e._id,
+    name: e.title,
+    category: e.category,
+    date: e.startDate ? e.startDate.split("T")[0] : "",
+    photos: 0,   // not yet tracked on backend
+    videos: 0,   // not yet tracked on backend
+    organizer: e.organizer,
+    image: e.coverImage && e.coverImage.trim() !== "" ? e.coverImage : FALLBACK_IMAGE,
+  };
+}
+
+const categories = ["All", "Technical", "Cultural", "Sports", "Academic", "Arts", "Workshop", "Photography", "Music", "Technology", "Art", "Social", "Other"];
 
 const categoryColors: Record<string, string> = {
   Technical: "#3b82f6",
@@ -29,6 +55,12 @@ const categoryColors: Record<string, string> = {
   Academic: "#10b981",
   Arts: "#8b5cf6",
   Workshop: "#06b6d4",
+  Photography: "#f97316",
+  Music: "#a855f7",
+  Technology: "#3b82f6",
+  Art: "#8b5cf6",
+  Social: "#ec4899",
+  Other: "#6b7fa3",
 };
 
 const sortOptions = [
@@ -38,16 +70,70 @@ const sortOptions = [
   { value: "za", label: "Z → A" },
 ];
 
-export function EventsPage({ onNavigate }: EventsPageProps) {
+export function EventsPage({ onNavigate, user }: EventsPageProps) {
+  const [events, setEvents] = useState<UIEvent[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState("All");
   const [sortBy, setSortBy] = useState("newest");
   const [showSort, setShowSort] = useState(false);
   const [dateFilter, setDateFilter] = useState("");
 
-  const filtered = allEvents
+  const isAdmin = user?.role === "admin" || user?.role === "Admin";
+
+  // ── Fetch events from backend ──────────────────────────────────────────────
+  useEffect(() => {
+    const fetchEvents = async () => {
+      try {
+        setLoading(true);
+        setError("");
+
+        const token =
+          localStorage.getItem("token") ||
+          sessionStorage.getItem("token") ||
+          "";
+
+        const res = await fetch("/api/events", {
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        });
+
+        if (!res.ok) {
+          throw new Error(`Failed to fetch events (${res.status})`);
+        }
+
+        const data = await res.json();
+
+        // Support plain array, { data: [...] }, and { events: [...] } responses
+        const raw: BackendEvent[] = Array.isArray(data)
+          ? data
+          : Array.isArray(data.data)
+          ? data.data
+          : Array.isArray(data.events)
+          ? data.events
+          : [];
+
+        setEvents(raw.map(mapEvent));
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : "Something went wrong");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchEvents();
+  }, []);
+
+  // ── Filter + sort ──────────────────────────────────────────────────────────
+  const filtered = events
     .filter((e) => {
-      const matchSearch = e.name.toLowerCase().includes(search.toLowerCase()) || e.organizer.toLowerCase().includes(search.toLowerCase());
+      const matchSearch =
+        e.name.toLowerCase().includes(search.toLowerCase()) ||
+        e.organizer.toLowerCase().includes(search.toLowerCase());
       const matchCat = activeCategory === "All" || e.category === activeCategory;
       const matchDate = !dateFilter || e.date >= dateFilter;
       return matchSearch && matchCat && matchDate;
@@ -60,24 +146,61 @@ export function EventsPage({ onNavigate }: EventsPageProps) {
       return 0;
     });
 
-  const upcoming = filtered.filter((e) => e.date > new Date().toISOString().split("T")[0]);
-  const past = filtered.filter((e) => e.date <= new Date().toISOString().split("T")[0]);
+  const today = new Date().toISOString().split("T")[0];
+  const upcoming = filtered.filter((e) => e.date > today);
+  const past = filtered.filter((e) => e.date <= today);
 
+  const totalPhotos = events.reduce((s, e) => s + e.photos, 0);
+
+  // ── Loading state ──────────────────────────────────────────────────────────
+  if (loading) {
+    return (
+      <div className="p-6 flex flex-col items-center justify-center" style={{ minHeight: 320 }}>
+        <div
+          className="w-10 h-10 rounded-full border-2 border-t-transparent animate-spin mb-4"
+          style={{ borderColor: "rgba(16,185,129,0.4)", borderTopColor: "transparent" }}
+        />
+        <p className="text-sm" style={{ color: "#6b7fa3" }}>Loading events…</p>
+      </div>
+    );
+  }
+
+  // ── Error state ────────────────────────────────────────────────────────────
+  if (error) {
+    return (
+      <div className="p-6 flex flex-col items-center justify-center" style={{ minHeight: 320 }}>
+        <div
+          className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4"
+          style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)" }}
+        >
+          <Search size={24} color="#ef4444" />
+        </div>
+        <p className="text-base font-medium text-white mb-1">Could not load events</p>
+        <p className="text-sm" style={{ color: "#6b7fa3" }}>{error}</p>
+      </div>
+    );
+  }
+
+  // ── Main render ────────────────────────────────────────────────────────────
   return (
     <div className="p-6 space-y-5">
       {/* Page header */}
       <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
         <div>
           <h2 className="text-xl font-bold text-white" style={{ fontFamily: "'Outfit', sans-serif" }}>All Events</h2>
-          <p className="text-sm" style={{ color: "#6b7fa3" }}>{allEvents.length} events · {allEvents.reduce((s, e) => s + e.photos, 0).toLocaleString()} photos</p>
+          <p className="text-sm" style={{ color: "#6b7fa3" }}>
+            {events.length} events · {totalPhotos.toLocaleString()} photos
+          </p>
         </div>
-        <button
-          onClick={() => onNavigate("createevent")}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white transition-all hover:scale-105 flex-shrink-0"
-          style={{ background: "linear-gradient(135deg, #10b981, #059669)", boxShadow: "0 4px 16px rgba(16,185,129,0.3)" }}
-        >
-          <Plus size={16} /> Create Event
-        </button>
+        {isAdmin && (
+          <button
+            onClick={() => onNavigate("createevent")}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white transition-all hover:scale-105 flex-shrink-0"
+            style={{ background: "linear-gradient(135deg, #10b981, #059669)", boxShadow: "0 4px 16px rgba(16,185,129,0.3)" }}
+          >
+            <Plus size={16} /> Create Event
+          </button>
+        )}
       </div>
 
       {/* Controls */}
@@ -219,6 +342,7 @@ export function EventsPage({ onNavigate }: EventsPageProps) {
         </section>
       )}
 
+      {/* Empty state */}
       {filtered.length === 0 && (
         <div className="text-center py-16">
           <div
@@ -235,9 +359,22 @@ export function EventsPage({ onNavigate }: EventsPageProps) {
   );
 }
 
-function EventCard({ event, onNavigate, upcoming = false }: { event: typeof allEvents[0]; onNavigate: (s: string) => void; upcoming?: boolean }) {
+// ── EventCard (unchanged UI, updated prop type) ──────────────────────────────
+function EventCard({
+  event,
+  onNavigate,
+  upcoming = false,
+}: {
+  event: UIEvent;
+  onNavigate: (s: string) => void;
+  upcoming?: boolean;
+}) {
   const color = categoryColors[event.category] || "#10b981";
-  const dateFormatted = new Date(event.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  const dateFormatted = new Date(event.date).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 
   return (
     <div
@@ -255,6 +392,7 @@ function EventCard({ event, onNavigate, upcoming = false }: { event: typeof allE
           src={event.image}
           alt={event.name}
           className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+          onError={(e) => { (e.currentTarget as HTMLImageElement).src = FALLBACK_IMAGE; }}
         />
         <div className="absolute inset-0" style={{ background: "linear-gradient(to bottom, transparent 40%, rgba(11,18,32,0.8) 100%)" }} />
 
@@ -280,7 +418,7 @@ function EventCard({ event, onNavigate, upcoming = false }: { event: typeof allE
           </div>
         )}
 
-        {/* Media count at bottom */}
+        {/* Media count */}
         {event.photos > 0 && (
           <div className="absolute bottom-3 right-3 flex items-center gap-1 px-2 py-0.5 rounded-full text-xs" style={{ background: "rgba(0,0,0,0.6)", color: "white", backdropFilter: "blur(4px)" }}>
             <Camera size={11} /> {event.photos.toLocaleString()}

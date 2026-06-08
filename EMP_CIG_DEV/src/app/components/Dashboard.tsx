@@ -1,52 +1,48 @@
+import { useState, useEffect } from "react";
 import { Camera, Calendar, Image, Video, Users, TrendingUp, Plus, Eye, Heart, Sparkles, Clock, MapPin, ArrowRight } from "lucide-react";
 
 interface DashboardProps {
   onNavigate: (screen: string) => void;
+  user?: {
+    name?: string;
+    email?: string;
+    role?: string;
+  };
 }
 
-const stats = [
-  { label: "Total Events", value: "1,284", change: "+12%", icon: Calendar, color: "#3b82f6" },
-  { label: "Total Photos", value: "48,932", change: "+8%", icon: Image, color: "#10b981" },
-  { label: "Total Videos", value: "3,741", change: "+24%", icon: Video, color: "#8b5cf6" },
-  { label: "Total Users", value: "12,480", change: "+5%", icon: Users, color: "#f59e0b" },
-];
+// ── Backend shape ────────────────────────────────────────────────────────────
+interface BackendEvent {
+  _id: string;
+  title: string;
+  category: string;
+  organizer: string;
+  startDate: string;   // ISO string
+  location?: string;
+  coverImage?: string;
+}
 
-const recentEvents = [
-  {
-    id: 1,
-    name: "Annual Tech Fest 2025",
-    category: "Technical",
-    date: "May 28, 2025",
-    photos: 842,
-    image: "https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=400&h=220&fit=crop&auto=format",
-    organizer: "CSE Department",
-  },
-  {
-    id: 2,
-    name: "Cultural Night — Spring Edition",
-    category: "Cultural",
-    date: "May 15, 2025",
-    photos: 1204,
-    image: "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=400&h=220&fit=crop&auto=format",
-    organizer: "Cultural Club",
-  },
-  {
-    id: 3,
-    name: "Intercollege Sports Meet",
-    category: "Sports",
-    date: "May 10, 2025",
-    photos: 567,
-    image: "https://images.unsplash.com/photo-1461896836934-ffe607ba8211?w=400&h=220&fit=crop&auto=format",
-    organizer: "Sports Committee",
-  },
-];
+// ── UI shapes ────────────────────────────────────────────────────────────────
+interface RecentEvent {
+  id: string;
+  name: string;
+  category: string;
+  date: string;        // "May 28, 2025"
+  photos: number;
+  image: string;
+  organizer: string;
+}
 
-const upcomingEvents = [
-  { name: "Freshers' Welcome 2025", date: "Jun 15, 2025", time: "4:00 PM", venue: "Main Auditorium", category: "Cultural" },
-  { name: "Robotics Workshop", date: "Jun 20, 2025", time: "10:00 AM", venue: "Lab Complex", category: "Technical" },
-  { name: "Photography Contest", date: "Jun 25, 2025", time: "2:00 PM", venue: "Gallery Hall", category: "Arts" },
-  { name: "Entrepreneurship Summit", date: "Jul 1, 2025", time: "9:00 AM", venue: "Conference Center", category: "Academic" },
-];
+interface UpcomingEvent {
+  id: string;
+  name: string;
+  date: string;        // "Jun 15, 2025"
+  category: string;
+  venue: string;
+}
+
+// ── Constants ────────────────────────────────────────────────────────────────
+const FALLBACK_IMAGE =
+  "https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=400&h=220&fit=crop&auto=format";
 
 const trendingPhotos = [
   "https://images.unsplash.com/photo-1523580494863-6f3031224c94?w=300&h=200&fit=crop&auto=format",
@@ -63,21 +59,171 @@ const categoryColors: Record<string, string> = {
   Sports: "#f59e0b",
   Arts: "#8b5cf6",
   Academic: "#10b981",
+  Photography: "#f97316",
+  Music: "#a855f7",
+  Technology: "#3b82f6",
+  Art: "#8b5cf6",
+  Social: "#ec4899",
+  Other: "#6b7fa3",
 };
 
-export function Dashboard({ onNavigate }: DashboardProps) {
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+/** "2025-05-28T00:00:00.000Z" → "May 28, 2025" */
+function formatDisplayDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+/** "2025-05-28T..." → "2025-05-28" */
+function toDateOnly(iso: string): string {
+  return iso.split("T")[0];
+}
+
+// ── Component ────────────────────────────────────────────────────────────────
+export function Dashboard({ onNavigate, user }: DashboardProps) {
+  const role = user?.role?.trim() || "Viewer";
+
+  // fetched data
+  const [allEvents, setAllEvents]     = useState<BackendEvent[]>([]);
+  const [loading, setLoading]         = useState(true);
+
+  // ── Fetch ──────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    const fetchEvents = async () => {
+      try {
+        const token =
+          localStorage.getItem("token") ||
+          sessionStorage.getItem("token") ||
+          "";
+
+        const res = await fetch("/api/events", {
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        });
+
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+        const data = await res.json();
+
+        const raw: BackendEvent[] = Array.isArray(data)
+          ? data
+          : Array.isArray(data.data)
+          ? data.data
+          : Array.isArray(data.events)
+          ? data.events
+          : [];
+
+        setAllEvents(raw);
+      } catch {
+        // silently fall through — UI renders with empty state
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchEvents();
+  }, []);
+
+  // ── Derived data ───────────────────────────────────────────────────────────
+  const today = new Date().toISOString().split("T")[0];
+
+  const upcomingRaw = allEvents
+    .filter((e) => toDateOnly(e.startDate) > today)
+    .sort((a, b) => a.startDate.localeCompare(b.startDate));
+
+  const pastRaw = allEvents.filter((e) => toDateOnly(e.startDate) <= today);
+
+  // Stats: Total Events / Upcoming / Past / (Photos placeholder until media API)
+  const statsData = [
+    {
+      label: "Total Events",
+      value: allEvents.length.toLocaleString(),
+      change: `${allEvents.length} total`,
+      icon: Calendar,
+      color: "#3b82f6",
+    },
+    {
+      label: "Upcoming Events",
+      value: upcomingRaw.length.toLocaleString(),
+      change: `${upcomingRaw.length} ahead`,
+      icon: Image,
+      color: "#10b981",
+    },
+    {
+      label: "Past Events",
+      value: pastRaw.length.toLocaleString(),
+      change: `${pastRaw.length} done`,
+      icon: Video,
+      color: "#8b5cf6",
+    },
+    {
+      label: "Total Users",
+      value: "—",
+      change: "coming soon",
+      icon: Users,
+      color: "#f59e0b",
+    },
+  ];
+
+  // Recent Events: last 3 by startDate (desc)
+  const recentEvents: RecentEvent[] = [...allEvents]
+    .sort((a, b) => b.startDate.localeCompare(a.startDate))
+    .slice(0, 3)
+    .map((e) => ({
+      id: e._id,
+      name: e.title,
+      category: e.category,
+      date: formatDisplayDate(e.startDate),
+      photos: 0,   // media not tracked yet
+      image: e.coverImage?.trim() ? e.coverImage : FALLBACK_IMAGE,
+      organizer: e.organizer,
+    }));
+
+  // Upcoming: next 4 future events
+  const upcomingEvents: UpcomingEvent[] = upcomingRaw.slice(0, 4).map((e) => ({
+    id: e._id,
+    name: e.title,
+    date: formatDisplayDate(e.startDate),
+    category: e.category,
+    venue: e.location || "Venue TBD",
+  }));
+
+  // ── Quick actions (unchanged) ──────────────────────────────────────────────
+  const allActions = [
+    { label: "Create Event", icon: Plus,     color: "#10b981", screen: "createevent", roles: ["Admin"] },
+    { label: "Upload Media", icon: Camera,   color: "#3b82f6", screen: "upload",      roles: ["Admin", "Photographer"] },
+    { label: "View Gallery", icon: Image,    color: "#8b5cf6", screen: "gallery",     roles: ["Admin", "Photographer", "Club Member", "Viewer"] },
+    { label: "AI Search",    icon: Sparkles, color: "#f59e0b", screen: "myphotos",    roles: ["Admin", "Photographer", "Club Member", "Viewer"] },
+  ];
+  const visibleActions = allActions.filter((a) => a.roles.includes(role));
+
+  // ── Skeleton shown while loading ───────────────────────────────────────────
+  if (loading) {
+    return (
+      <div className="p-6 flex flex-col items-center justify-center" style={{ minHeight: 320 }}>
+        <div
+          className="w-10 h-10 rounded-full border-2 border-t-transparent animate-spin mb-4"
+          style={{ borderColor: "rgba(16,185,129,0.4)", borderTopColor: "transparent" }}
+        />
+        <p className="text-sm" style={{ color: "#6b7fa3" }}>Loading dashboard…</p>
+      </div>
+    );
+  }
+
+  // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="p-6 space-y-6">
-      {/* Quick actions */}
+      {/* Quick actions — untouched */}
       <div>
         <p className="text-xs font-medium uppercase tracking-wider mb-3" style={{ color: "#6b7fa3" }}>Quick Actions</p>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          {[
-            { label: "Create Event", icon: Plus, color: "#10b981", screen: "createevent" },
-            { label: "Upload Media", icon: Camera, color: "#3b82f6", screen: "upload" },
-            { label: "View Gallery", icon: Image, color: "#8b5cf6", screen: "gallery" },
-            { label: "AI Search", icon: Sparkles, color: "#f59e0b", screen: "myphotos" },
-          ].map(({ label, icon: Icon, color, screen }) => (
+          {visibleActions.map(({ label, icon: Icon, color, screen }) => (
             <button
               key={label}
               onClick={() => onNavigate(screen)}
@@ -99,9 +245,9 @@ export function Dashboard({ onNavigate }: DashboardProps) {
         </div>
       </div>
 
-      {/* Stats */}
+      {/* Stats — driven by fetched data */}
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
-        {stats.map(({ label, value, change, icon: Icon, color }) => (
+        {statsData.map(({ label, value, change, icon: Icon, color }) => (
           <div
             key={label}
             className="p-5 rounded-xl"
@@ -143,48 +289,53 @@ export function Dashboard({ onNavigate }: DashboardProps) {
             </button>
           </div>
           <div className="space-y-3">
-            {recentEvents.map((event) => (
-              <div
-                key={event.id}
-                className="flex gap-4 p-4 rounded-xl cursor-pointer transition-all duration-200 hover:scale-[1.01]"
-                style={{
-                  background: "rgba(11,18,32,0.8)",
-                  border: "1px solid rgba(16,185,129,0.1)",
-                }}
-                onClick={() => onNavigate("eventdetails")}
-              >
-                <img
-                  src={event.image}
-                  alt={event.name}
-                  className="w-20 h-14 rounded-lg object-cover flex-shrink-0"
-                  style={{ background: "#0b1220" }}
-                />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-start justify-between gap-2">
-                    <h3 className="text-sm font-semibold text-white leading-snug">{event.name}</h3>
-                    <span
-                      className="text-xs px-2 py-0.5 rounded-full flex-shrink-0"
-                      style={{
-                        background: `${categoryColors[event.category] || "#10b981"}18`,
-                        color: categoryColors[event.category] || "#10b981",
-                        border: `1px solid ${categoryColors[event.category] || "#10b981"}30`,
-                      }}
-                    >
-                      {event.category}
-                    </span>
-                  </div>
-                  <p className="text-xs mt-1" style={{ color: "#6b7fa3" }}>{event.organizer}</p>
-                  <div className="flex items-center gap-3 mt-2">
-                    <span className="flex items-center gap-1 text-xs" style={{ color: "#6b7fa3" }}>
-                      <Clock size={11} /> {event.date}
-                    </span>
-                    <span className="flex items-center gap-1 text-xs" style={{ color: "#6b7fa3" }}>
-                      <Camera size={11} /> {event.photos.toLocaleString()} photos
-                    </span>
+            {recentEvents.length === 0 ? (
+              <p className="text-sm" style={{ color: "#6b7fa3" }}>No events yet.</p>
+            ) : (
+              recentEvents.map((event) => (
+                <div
+                  key={event.id}
+                  className="flex gap-4 p-4 rounded-xl cursor-pointer transition-all duration-200 hover:scale-[1.01]"
+                  style={{
+                    background: "rgba(11,18,32,0.8)",
+                    border: "1px solid rgba(16,185,129,0.1)",
+                  }}
+                  onClick={() => onNavigate("eventdetails")}
+                >
+                  <img
+                    src={event.image}
+                    alt={event.name}
+                    className="w-20 h-14 rounded-lg object-cover flex-shrink-0"
+                    style={{ background: "#0b1220" }}
+                    onError={(e) => { (e.currentTarget as HTMLImageElement).src = FALLBACK_IMAGE; }}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2">
+                      <h3 className="text-sm font-semibold text-white leading-snug">{event.name}</h3>
+                      <span
+                        className="text-xs px-2 py-0.5 rounded-full flex-shrink-0"
+                        style={{
+                          background: `${categoryColors[event.category] || "#10b981"}18`,
+                          color: categoryColors[event.category] || "#10b981",
+                          border: `1px solid ${categoryColors[event.category] || "#10b981"}30`,
+                        }}
+                      >
+                        {event.category}
+                      </span>
+                    </div>
+                    <p className="text-xs mt-1" style={{ color: "#6b7fa3" }}>{event.organizer}</p>
+                    <div className="flex items-center gap-3 mt-2">
+                      <span className="flex items-center gap-1 text-xs" style={{ color: "#6b7fa3" }}>
+                        <Clock size={11} /> {event.date}
+                      </span>
+                      <span className="flex items-center gap-1 text-xs" style={{ color: "#6b7fa3" }}>
+                        <Camera size={11} /> {event.photos.toLocaleString()} photos
+                      </span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
 
@@ -201,40 +352,45 @@ export function Dashboard({ onNavigate }: DashboardProps) {
             </button>
           </div>
           <div className="space-y-2.5">
-            {upcomingEvents.map((event, i) => (
-              <div
-                key={i}
-                className="p-3.5 rounded-xl cursor-pointer transition-all duration-200 hover:scale-[1.01]"
-                style={{
-                  background: "rgba(11,18,32,0.8)",
-                  border: "1px solid rgba(16,185,129,0.1)",
-                }}
-              >
-                <div className="flex items-start gap-3">
-                  <div
-                    className="w-10 h-10 rounded-xl flex flex-col items-center justify-center flex-shrink-0 text-xs font-bold"
-                    style={{ background: `${categoryColors[event.category] || "#10b981"}15`, color: categoryColors[event.category] || "#10b981" }}
-                  >
-                    <span>{event.date.split(" ")[1].replace(",", "")}</span>
-                    <span style={{ fontSize: 9 }}>{event.date.split(" ")[0]}</span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-white leading-snug">{event.name}</p>
-                    <p className="text-xs mt-0.5 flex items-center gap-1" style={{ color: "#6b7fa3" }}>
-                      <Clock size={10} /> {event.time}
-                    </p>
-                    <p className="text-xs flex items-center gap-1 mt-0.5" style={{ color: "#6b7fa3" }}>
-                      <MapPin size={10} /> {event.venue}
-                    </p>
+            {upcomingEvents.length === 0 ? (
+              <p className="text-sm" style={{ color: "#6b7fa3" }}>No upcoming events.</p>
+            ) : (
+              upcomingEvents.map((event) => (
+                <div
+                  key={event.id}
+                  className="p-3.5 rounded-xl cursor-pointer transition-all duration-200 hover:scale-[1.01]"
+                  style={{
+                    background: "rgba(11,18,32,0.8)",
+                    border: "1px solid rgba(16,185,129,0.1)",
+                  }}
+                >
+                  <div className="flex items-start gap-3">
+                    <div
+                      className="w-10 h-10 rounded-xl flex flex-col items-center justify-center flex-shrink-0 text-xs font-bold"
+                      style={{
+                        background: `${categoryColors[event.category] || "#10b981"}15`,
+                        color: categoryColors[event.category] || "#10b981",
+                      }}
+                    >
+                      {/* "Jun 15, 2025" → day + month */}
+                      <span>{event.date.split(" ")[1].replace(",", "")}</span>
+                      <span style={{ fontSize: 9 }}>{event.date.split(" ")[0]}</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-white leading-snug">{event.name}</p>
+                      <p className="text-xs flex items-center gap-1 mt-0.5" style={{ color: "#6b7fa3" }}>
+                        <MapPin size={10} /> {event.venue}
+                      </p>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
       </div>
 
-      {/* Trending media */}
+      {/* Trending media — hardcoded, unchanged */}
       <div>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-base font-semibold text-white flex items-center gap-2">
