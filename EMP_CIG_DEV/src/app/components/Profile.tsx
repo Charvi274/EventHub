@@ -4,7 +4,7 @@ import { Edit3, Award, Image, Star, Calendar, Heart, Upload, Camera, ImageOff, L
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const API_BASE = "http://localhost:5000";
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 // ─── Role badge colour map ─────────────────────────────────────────────────────
 const roleBadge: Record<string, { bg: string; color: string; border: string }> = {
