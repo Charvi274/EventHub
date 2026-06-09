@@ -36,12 +36,9 @@ export default defineConfig({
 
   server: {
     proxy: {
-      // All requests starting with /api are forwarded to the Express backend.
-      // The frontend stays on http://localhost:5173 and never sees CORS issues.
       '/api': {
-        target: 'http://localhost:5000',
+        target: process.env.VITE_API_URL || 'http://localhost:5000',
         changeOrigin: true,
-        // No rewrite needed — backend routes are already mounted at /api/...
       },
     },
   },
