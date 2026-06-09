@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { ArrowLeft, Camera, Share2, Download, Clock, MapPin, User, Tag, Heart, MessageCircle, Filter, SortAsc, Play, ChevronDown } from "lucide-react";
+import type { BackendMedia } from "./PhotoDetails";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -28,7 +29,9 @@ interface MediaItem {
 interface EventDetailsProps {
   eventId: string;           // real MongoDB _id  ← NEW (required)
   onBack: () => void;
-  onNavigate: (screen: string) => void;
+  // Second arg is the media item to open (matches App.navigate signature)
+  onNavigate: (screen: string, media?: BackendMedia) => void;
+  user?: { name?: string; email?: string; role?: string };
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -54,7 +57,8 @@ function formatDateRange(start: string, end: string): string {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function EventDetails({ eventId, onBack, onNavigate }: EventDetailsProps) {
+export function EventDetails({ eventId, onBack, onNavigate, user }: EventDetailsProps) {
+  const canUpload = ["Admin", "Photographer"].includes(user?.role ?? "");
   const [activeFilter, setActiveFilter] = useState("all");
   const [liked, setLiked] = useState(false);
   const [showSortMenu, setShowSortMenu] = useState(false);
@@ -179,6 +183,7 @@ export function EventDetails({ eventId, onBack, onNavigate }: EventDetailsProps)
               </h1>
             </div>
             <div className="flex gap-2">
+              {canUpload && (
               <button
                 className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs text-white transition-all hover:scale-105"
                 style={{ background: "rgba(16,185,129,0.2)", border: "1px solid rgba(16,185,129,0.4)", backdropFilter: "blur(8px)" }}
@@ -186,6 +191,7 @@ export function EventDetails({ eventId, onBack, onNavigate }: EventDetailsProps)
               >
                 <Camera size={14} /> Upload
               </button>
+              )}
               <button
                 className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs text-white transition-all hover:scale-105"
                 style={{ background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", backdropFilter: "blur(8px)" }}
@@ -319,7 +325,7 @@ export function EventDetails({ eventId, onBack, onNavigate }: EventDetailsProps)
               key={item._id}
               className="relative group rounded-xl overflow-hidden break-inside-avoid cursor-pointer"
               style={{ background: "#0b1220" }}
-              onClick={() => onNavigate("photodetails")}
+              onClick={() => onNavigate("photodetails", { _id: item._id, title: item.title, fileUrl: item.fileUrl, fileType: item.fileType, tags: [], likes: { count: item.likes.count, likedBy: [] }, downloads: 0, createdAt: "" })}
             >
               {item.fileType === "video" && (
                 <div className="absolute top-2 right-2 z-10 w-7 h-7 rounded-full flex items-center justify-center" style={{ background: "rgba(0,0,0,0.6)" }}>

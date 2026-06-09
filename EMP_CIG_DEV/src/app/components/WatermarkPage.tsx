@@ -1,6 +1,12 @@
-import { useState } from "react";
-import { Shield, Droplets, Check, Eye, Download, AlertCircle, ChevronRight } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Shield, Droplets, Check, AlertCircle } from "lucide-react";
 
+// ── Auth helper ───────────────────────────────────────────────────────────────
+function getToken(): string {
+  return localStorage.getItem("token") || sessionStorage.getItem("token") || "";
+}
+
+// ── Sub-components ────────────────────────────────────────────────────────────
 function Toggle({ enabled, onToggle }: { enabled: boolean; onToggle: () => void }) {
   return (
     <button
@@ -31,48 +37,177 @@ function Toggle({ enabled, onToggle }: { enabled: boolean; onToggle: () => void 
 
 const positionOptions = [
   { id: "bottom-right", label: "Bottom Right" },
-  { id: "bottom-left", label: "Bottom Left" },
-  { id: "top-right", label: "Top Right" },
-  { id: "center", label: "Center (Diagonal)" },
+  { id: "bottom-left",  label: "Bottom Left"  },
+  { id: "top-right",    label: "Top Right"    },
+  { id: "center",       label: "Center (Diagonal)" },
 ];
 
 const opacityOptions = [15, 25, 40, 60, 80];
 
+// ── Types ─────────────────────────────────────────────────────────────────────
+interface WatermarkSettings {
+  enabled:     boolean;
+  clubName:    string;
+  eventName:   string;
+  includeRole: boolean;
+  includeDate: boolean;
+  position:    "bottom-right" | "bottom-left" | "top-right" | "center";
+  opacity:     15 | 25 | 40 | 60 | 80;
+}
+
+const DEFAULTS: WatermarkSettings = {
+  enabled:     true,
+  clubName:    "CSE Department",
+  eventName:   "Annual Tech Fest 2025",
+  includeRole: true,
+  includeDate: true,
+  position:    "bottom-right",
+  opacity:     25,
+};
+
+// ── Component ─────────────────────────────────────────────────────────────────
 export function WatermarkPage() {
-  const [enabled, setEnabled] = useState(true);
-  const [clubName, setClubName] = useState("CSE Department");
-  const [eventName, setEventName] = useState("Annual Tech Fest 2025");
-  const [includeRole, setIncludeRole] = useState(true);
-  const [includeDate, setIncludeDate] = useState(true);
-  const [includeIcon, setIncludeIcon] = useState(true);
-  const [position, setPosition] = useState("bottom-right");
-  const [opacity, setOpacity] = useState(25);
-  const [applyAll, setApplyAll] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const [enabled,     setEnabled]     = useState(DEFAULTS.enabled);
+  const [clubName,    setClubName]    = useState(DEFAULTS.clubName);
+  const [eventName,   setEventName]   = useState(DEFAULTS.eventName);
+  const [includeRole, setIncludeRole] = useState(DEFAULTS.includeRole);
+  const [includeDate, setIncludeDate] = useState(DEFAULTS.includeDate);
+  const [position,    setPosition]    = useState<WatermarkSettings["position"]>(DEFAULTS.position);
+  const [opacity,     setOpacity]     = useState<WatermarkSettings["opacity"]>(DEFAULTS.opacity);
+  const [userRole,    setUserRole]    = useState<string>("Photographer");
 
+  // ── Feedback state ──────────────────────────────────────────────────────────
+  const [saved,    setSaved]    = useState(false);
+  const [loading,  setLoading]  = useState(true);   // initial fetch
+  const [saving,   setSaving]   = useState(false);  // PUT in progress
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  // ── Load settings from backend on mount ────────────────────────────────────
+  useEffect(() => {
+    fetch("/api/auth/watermark-settings", {
+      headers: { Authorization: `Bearer ${getToken()}` },
+    })
+      .then((r) => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
+      .then((data) => {
+        const s: WatermarkSettings = data.watermarkSettings;
+        if (!s) return; // nothing stored yet; keep defaults
+
+        // Only update fields that are explicitly present in the response
+        // so we never overwrite a default with undefined.
+        if (s.enabled     !== undefined) setEnabled(s.enabled);
+        if (s.clubName    !== undefined) setClubName(s.clubName);
+        if (s.eventName   !== undefined) setEventName(s.eventName);
+        if (s.includeRole !== undefined) setIncludeRole(s.includeRole);
+        if (s.includeDate !== undefined) setIncludeDate(s.includeDate);
+        if (s.position    !== undefined) setPosition(s.position);
+        if (s.opacity     !== undefined) setOpacity(s.opacity as WatermarkSettings["opacity"]);
+      })
+      .catch(() => {
+        // Silently fall back to defaults — the user can still save manually
+      })
+      .finally(() => setLoading(false));
+
+    // Fetch the logged-in user's actual role for the preview
+    fetch("/api/auth/me", {
+      headers: { Authorization: `Bearer ${getToken()}` },
+    })
+      .then((r) => r.ok ? r.json() : Promise.reject())
+      .then((data) => {
+        const role = data?.user?.role ?? data?.role;
+        if (role) setUserRole(role);
+      })
+      .catch(() => { /* keep default */ });
+  }, []);
+
+  // ── Derived watermark text (mirrors UI preview logic) ──────────────────────
   const watermarkText = [
-    includeIcon ? "📸 " : "",
     clubName,
-    eventName ? ` · ${eventName}` : "",
-    includeRole ? " · Photographer" : "",
-    includeDate ? ` · ${new Date().getFullYear()}` : "",
-  ].join("");
+    eventName || null,
+    includeRole ? userRole : null,
+    includeDate ? String(new Date().getFullYear()) : null,
+  ].filter(Boolean).join(" - ");
 
-  const getWatermarkStyle = () => {
-    const posMap: Record<string, React.CSSProperties> = {
-      "bottom-right": { bottom: 16, right: 16 },
-      "bottom-left": { bottom: 16, left: 16 },
-      "top-right": { top: 16, right: 16 },
-      "center": { top: "50%", left: "50%", transform: "translate(-50%, -50%) rotate(-25deg)" },
+  // ── Watermark overlay position style (for the preview image) ────────────────
+  const getWatermarkOverlayStyle = (): React.CSSProperties => {
+    const base: React.CSSProperties = {
+      position: "absolute",
+      fontSize: 11,
+      fontWeight: 500,
+      color: "white",
+      whiteSpace: "nowrap",
+      opacity: opacity / 100,
+      textShadow: "0 1px 4px rgba(0,0,0,0.9)",
+      letterSpacing: "0.03em",
+      pointerEvents: "none",
     };
-    return posMap[position] || { bottom: 16, right: 16 };
+    if (position === "center") return base; // handled separately with transform
+    const posMap: Record<string, React.CSSProperties> = {
+      "bottom-right": { bottom: 12, right: 12 },
+      "bottom-left":  { bottom: 12, left: 12 },
+      "top-right":    { top: 12, right: 12 },
+    };
+    return { ...base, ...(posMap[position] ?? { bottom: 12, right: 12 }) };
   };
 
-  const handleSave = () => {
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+  // ── Save handler ───────────────────────────────────────────────────────────
+  const handleSave = async () => {
+    if (saving) return;
+    setSaving(true);
+    setSaveError(null);
+
+    try {
+      const res = await fetch("/api/auth/watermark-settings", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${getToken()}`,
+        },
+        body: JSON.stringify({
+          enabled,
+          clubName,
+          eventName,
+          includeRole,
+          includeDate,
+          position,
+          opacity,
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || `HTTP ${res.status}`);
+      }
+
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to save settings.";
+      setSaveError(message);
+    } finally {
+      setSaving(false);
+    }
   };
 
+  // ── Test download handler ──────────────────────────────────────────────────
+  // Opens the Unsplash preview image with current watermark settings applied
+  // via a Cloudinary-style URL — useful for verifying position/opacity visually.
+  // Since the preview image is not on the project's Cloudinary account, this
+  // simply opens the raw preview URL in a new tab as a no-op placeholder.
+  
+
+  // ── Loading skeleton ───────────────────────────────────────────────────────
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center" style={{ minHeight: 320 }}>
+        <div
+          className="w-8 h-8 rounded-full border-2 border-t-transparent animate-spin"
+          style={{ borderColor: "rgba(16,185,129,0.4)", borderTopColor: "transparent" }}
+        />
+      </div>
+    );
+  }
+
+  // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-6">
       {/* Header */}
@@ -101,6 +236,17 @@ export function WatermarkPage() {
           <p className="text-sm" style={{ color: "#c4cdd8" }}>
             Watermarking is disabled. Photos downloaded by users will have no attribution. Enable to protect your media.
           </p>
+        </div>
+      )}
+
+      {/* Save error banner */}
+      {saveError && (
+        <div
+          className="flex items-center gap-3 p-4 rounded-xl"
+          style={{ background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.2)" }}
+        >
+          <AlertCircle size={16} color="#ef4444" />
+          <p className="text-sm" style={{ color: "#c4cdd8" }}>{saveError}</p>
         </div>
       )}
 
@@ -133,7 +279,7 @@ export function WatermarkPage() {
                   color: "#e8edf5",
                 }}
                 onFocus={(e) => { e.currentTarget.style.borderColor = "rgba(16,185,129,0.5)"; }}
-                onBlur={(e) => { e.currentTarget.style.borderColor = "rgba(16,185,129,0.15)"; }}
+                onBlur={(e)  => { e.currentTarget.style.borderColor = "rgba(16,185,129,0.15)"; }}
               />
             </div>
 
@@ -151,7 +297,7 @@ export function WatermarkPage() {
                   color: "#e8edf5",
                 }}
                 onFocus={(e) => { e.currentTarget.style.borderColor = "rgba(16,185,129,0.5)"; }}
-                onBlur={(e) => { e.currentTarget.style.borderColor = "rgba(16,185,129,0.15)"; }}
+                onBlur={(e)  => { e.currentTarget.style.borderColor = "rgba(16,185,129,0.15)"; }}
               />
             </div>
 
@@ -159,8 +305,7 @@ export function WatermarkPage() {
             <div className="space-y-3">
               {[
                 { label: "Include user role", desc: "e.g. Photographer, Admin", val: includeRole, set: () => setIncludeRole(!includeRole) },
-                { label: "Include year", desc: "Append the current year", val: includeDate, set: () => setIncludeDate(!includeDate) },
-                { label: "Include camera icon", desc: "Adds 📸 prefix", val: includeIcon, set: () => setIncludeIcon(!includeIcon) },
+                { label: "Include year",      desc: "Append the current year",   val: includeDate, set: () => setIncludeDate(!includeDate) },
               ].map(({ label, desc, val, set }) => (
                 <div key={label} className="flex items-center justify-between">
                   <div>
@@ -191,13 +336,12 @@ export function WatermarkPage() {
                 {positionOptions.map(({ id, label }) => (
                   <button
                     key={id}
-                    onClick={() => setPosition(id)}
-                    className="py-2 rounded-xl text-xs transition-all"
+                    onClick={() => setPosition(id as WatermarkSettings["position"])}
+                    className="px-3 py-2 rounded-lg text-xs transition-all text-left"
                     style={{
                       background: position === id ? "rgba(16,185,129,0.12)" : "rgba(255,255,255,0.03)",
                       border: `1px solid ${position === id ? "rgba(16,185,129,0.4)" : "rgba(255,255,255,0.06)"}`,
                       color: position === id ? "#10b981" : "#6b7fa3",
-                      fontWeight: position === id ? 600 : 400,
                     }}
                   >
                     {label}
@@ -215,7 +359,7 @@ export function WatermarkPage() {
                 {opacityOptions.map((op) => (
                   <button
                     key={op}
-                    onClick={() => setOpacity(op)}
+                    onClick={() => setOpacity(op as WatermarkSettings["opacity"])}
                     className="flex-1 py-1.5 rounded-lg text-xs transition-all"
                     style={{
                       background: opacity === op ? "rgba(16,185,129,0.15)" : "rgba(255,255,255,0.03)",
@@ -229,129 +373,103 @@ export function WatermarkPage() {
               </div>
             </div>
 
-            <div className="flex items-center justify-between pt-1">
-              <div>
-                <p className="text-sm text-white">Apply to all future downloads</p>
-                <p className="text-xs" style={{ color: "#6b7fa3" }}>Auto-apply watermark globally across all events</p>
-              </div>
-              <Toggle enabled={applyAll} onToggle={() => setApplyAll(!applyAll)} />
-            </div>
+
           </div>
         </div>
 
         {/* Right: preview */}
         <div className="space-y-4">
-          {/* Before */}
-          <div>
-            <p className="text-xs font-medium mb-2 flex items-center gap-2" style={{ color: "#6b7fa3" }}>
-              <Eye size={12} /> Original Photo (no watermark)
-            </p>
-            <div
-              className="relative rounded-2xl overflow-hidden"
-              style={{ border: "1px solid rgba(255,255,255,0.06)", height: 220 }}
-            >
-              <img
-                src="https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=600&h=400&fit=crop&auto=format"
-                alt="Before watermark"
-                className="w-full h-full object-cover"
-              />
-              <div
-                className="absolute top-3 left-3 px-2 py-1 rounded-full text-xs font-medium"
-                style={{ background: "rgba(0,0,0,0.6)", color: "#6b7fa3", backdropFilter: "blur(4px)" }}
-              >
-                Before Download
-              </div>
-            </div>
-          </div>
+          {/* Image watermark preview */}
+          <div
+            className="p-5 rounded-2xl space-y-3"
+            style={{ background: "rgba(11,18,32,0.8)", border: "1px solid rgba(16,185,129,0.1)" }}
+          >
+            <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: "#6b7fa3" }}>Watermark Preview</p>
 
-          {/* After */}
-          <div>
-            <p className="text-xs font-medium mb-2 flex items-center gap-2" style={{ color: "#6b7fa3" }}>
-              <Droplets size={12} color="#10b981" />
-              <span style={{ color: "#10b981" }}>After Download</span> — watermark applied
-            </p>
+            {/* Sample image with live overlay */}
             <div
-              className="relative rounded-2xl overflow-hidden"
-              style={{ border: "1px solid rgba(16,185,129,0.2)", height: 220 }}
+              className="relative rounded-xl overflow-hidden"
+              style={{ height: 200, border: "1px solid rgba(16,185,129,0.15)" }}
             >
               <img
-                src="https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=600&h=400&fit=crop&auto=format"
-                alt="After watermark"
+                src="https://thumbs.dreamstime.com/b/preview-torn-green-paper-revealing-word-78469923.jpg"
+                alt="Watermark preview"
                 className="w-full h-full object-cover"
               />
 
-              {/* Diagonal tiled pattern for center */}
-              {position === "center" && enabled && (
+              {/* Dim overlay when watermark disabled */}
+              {!enabled && (
                 <div
                   className="absolute inset-0 flex items-center justify-center"
-                  style={{ pointerEvents: "none" }}
+                  style={{ background: "rgba(0,0,0,0.55)" }}
                 >
+                  <span className="text-xs font-medium" style={{ color: "#6b7fa3" }}>Watermarking disabled</span>
+                </div>
+              )}
+
+              {/* Center: tiled diagonal */}
+              {enabled && position === "center" && (
+                <div className="absolute inset-0" style={{ pointerEvents: "none" }}>
                   {[-1, 0, 1].map((row) =>
                     [-1, 0, 1].map((col) => (
                       <div
                         key={`${row}-${col}`}
                         className="absolute text-white font-medium"
                         style={{
+                          top: "50%",
+                          left: "50%",
                           fontSize: 11,
                           opacity: opacity / 100,
-                          transform: `translate(${col * 140}px, ${row * 60}px) rotate(-25deg)`,
+                          transform: `translate(calc(-50% + ${col * 130}px), calc(-50% + ${row * 52}px)) rotate(-25deg)`,
                           whiteSpace: "nowrap",
-                          textShadow: "0 1px 3px rgba(0,0,0,0.8)",
-                          letterSpacing: "0.02em",
+                          textShadow: "0 1px 3px rgba(0,0,0,0.9)",
+                          letterSpacing: "0.03em",
                         }}
                       >
-                        {watermarkText}
+                        {watermarkText || "—"}
                       </div>
                     ))
                   )}
                 </div>
               )}
 
-              {/* Single position watermark */}
-              {position !== "center" && enabled && (
-                <div
-                  className="absolute text-white font-medium"
-                  style={{
-                    ...getWatermarkStyle(),
-                    fontSize: 11,
-                    opacity: opacity / 100,
-                    whiteSpace: "nowrap",
-                    textShadow: "0 1px 4px rgba(0,0,0,0.9)",
-                    background: "rgba(0,0,0,0.35)",
-                    padding: "4px 8px",
-                    borderRadius: 6,
-                    backdropFilter: "blur(4px)",
-                    border: "1px solid rgba(255,255,255,0.1)",
-                    letterSpacing: "0.02em",
-                  }}
-                >
-                  {watermarkText}
+              {/* Edge positions */}
+              {enabled && position !== "center" && (
+                <div style={getWatermarkOverlayStyle()}>
+                  {watermarkText || "—"}
                 </div>
               )}
 
-              <div
-                className="absolute top-3 left-3 px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1"
-                style={{ background: "rgba(16,185,129,0.2)", color: "#10b981", backdropFilter: "blur(4px)", border: "1px solid rgba(16,185,129,0.4)" }}
-              >
-                <Shield size={10} /> Protected
-              </div>
+              {/* "Protected" badge */}
+              {enabled && (
+                <div
+                  className="absolute top-2 left-2 px-2 py-0.5 rounded-full text-xs font-medium flex items-center gap-1"
+                  style={{ background: "rgba(16,185,129,0.2)", color: "#10b981", backdropFilter: "blur(4px)", border: "1px solid rgba(16,185,129,0.4)" }}
+                >
+                  <Shield size={9} /> Protected
+                </div>
+              )}
             </div>
-          </div>
 
-          {/* Watermark text preview */}
-          <div
-            className="p-4 rounded-xl"
-            style={{ background: "rgba(16,185,129,0.05)", border: "1px solid rgba(16,185,129,0.15)" }}
-          >
-            <p className="text-xs font-medium mb-1" style={{ color: "#6b7fa3" }}>Watermark text preview</p>
-            <p className="text-sm font-medium" style={{ color: enabled ? "#10b981" : "#6b7fa3" }}>
-              {enabled ? watermarkText || "No content configured" : "Watermarking disabled"}
+            {/* Text readout below image */}
+            <div
+              className="px-3 py-2 rounded-lg"
+              style={{ background: "rgba(16,185,129,0.05)", border: "1px solid rgba(16,185,129,0.1)" }}
+            >
+              <p className="text-xs font-mono break-all" style={{ color: enabled ? "#10b981" : "#6b7fa3" }}>
+                {enabled ? watermarkText || "No content configured" : "Watermarking disabled"}
+              </p>
+            </div>
+
+            <p className="text-xs" style={{ color: "#6b7fa3" }}>
+              Position: <span className="text-white">{positionOptions.find(p => p.id === position)?.label}</span>
+              {" · "}Opacity: <span className="text-white">{opacity}%</span>
             </p>
           </div>
 
           {/* How it works */}
           <div
-            className="p-4 rounded-xl space-y-2"
+            className="p-5 rounded-2xl space-y-2"
             style={{ background: "rgba(11,18,32,0.8)", border: "1px solid rgba(16,185,129,0.08)" }}
           >
             <p className="text-xs font-semibold text-white">How it works</p>
@@ -375,11 +493,12 @@ export function WatermarkPage() {
         </div>
       </div>
 
-      {/* Save */}
+      {/* Save row */}
       <div className="flex gap-3 pt-2">
         <button
           onClick={handleSave}
-          className="flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-semibold text-white transition-all hover:scale-105"
+          disabled={saving}
+          className="flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-semibold text-white transition-all hover:scale-105 disabled:opacity-70 disabled:cursor-not-allowed disabled:hover:scale-100"
           style={{
             background: saved ? "rgba(16,185,129,0.2)" : "linear-gradient(135deg, #10b981, #059669)",
             boxShadow: saved ? "none" : "0 4px 20px rgba(16,185,129,0.3)",
@@ -387,14 +506,11 @@ export function WatermarkPage() {
             color: saved ? "#10b981" : "white",
           }}
         >
-          {saved ? <><Check size={15} /> Saved!</> : <><Shield size={15} /> Save Watermark Settings</>}
+          {saved   ? <><Check size={15} /> Saved!</>
+         : saving  ? <><div className="w-4 h-4 rounded-full border-2 border-white/40 border-t-white animate-spin" /> Saving…</>
+         :           <><Shield size={15} /> Save Watermark Settings</>}
         </button>
-        <button
-          className="flex items-center gap-2 px-4 py-3 rounded-xl text-sm transition-all hover:bg-white/5"
-          style={{ border: "1px solid rgba(16,185,129,0.15)", color: "#6b7fa3" }}
-        >
-          <Download size={15} /> Test Download
-        </button>
+        
       </div>
     </div>
   );

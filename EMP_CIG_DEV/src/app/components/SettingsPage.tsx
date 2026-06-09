@@ -1,362 +1,351 @@
-import { useState } from "react";
-import { Bell, Shield, Palette, Chrome, Lock, Eye, EyeOff, Check, ChevronRight, Smartphone, Mail, Globe, Moon, Sun, Monitor } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { Lock, Eye, EyeOff, Check, AlertCircle, Loader2, LogOut, User, Bell, Info } from "lucide-react";
 
-function Toggle({ enabled, onToggle }: { enabled: boolean; onToggle: () => void }) {
-  return (
-    <button
-      onClick={onToggle}
-      className="relative flex-shrink-0 transition-all duration-200"
-      style={{
-        width: 40,
-        height: 22,
-        borderRadius: 11,
-        background: enabled ? "#10b981" : "rgba(255,255,255,0.12)",
-        boxShadow: enabled ? "0 0 8px rgba(16,185,129,0.4)" : "none",
-      }}
-    >
-      <div
-        className="absolute top-0.5 transition-all duration-200"
-        style={{
-          width: 18,
-          height: 18,
-          borderRadius: 9,
-          background: "white",
-          left: enabled ? 20 : 2,
-          boxShadow: "0 1px 4px rgba(0,0,0,0.3)",
-        }}
-      />
-    </button>
-  );
+const API_BASE = "http://localhost:5000/api";
+
+function getToken() {
+  return localStorage.getItem("token") || sessionStorage.getItem("token") || "";
+}
+function getStoredUser() {
+  try {
+    const raw = localStorage.getItem("user") || sessionStorage.getItem("user");
+    return raw ? JSON.parse(raw) : {};
+  } catch { return {}; }
 }
 
-function SectionHeader({ title, desc }: { title: string; desc?: string }) {
+type Toast = { type: "success" | "error"; message: string } | null;
+
+function ToastBar({ toast, onDismiss }: { toast: Toast; onDismiss: () => void }) {
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(onDismiss, 4000);
+    return () => clearTimeout(t);
+  }, [toast, onDismiss]);
+  if (!toast) return null;
+  const ok = toast.type === "success";
   return (
-    <div className="mb-3">
-      <h3 className="text-sm font-semibold text-white">{title}</h3>
-      {desc && <p className="text-xs mt-0.5" style={{ color: "#6b7fa3" }}>{desc}</p>}
+    <div style={{
+      position: "fixed", bottom: 24, right: 24, zIndex: 50,
+      display: "flex", alignItems: "center", gap: 10,
+      padding: "12px 16px", borderRadius: 12, fontSize: 14, fontWeight: 500,
+      background: ok ? "rgba(16,185,129,0.15)" : "rgba(239,68,68,0.15)",
+      border: `1px solid ${ok ? "rgba(16,185,129,0.4)" : "rgba(239,68,68,0.4)"}`,
+      color: ok ? "#10b981" : "#f87171", backdropFilter: "blur(8px)",
+    }}>
+      {ok ? <Check size={15} /> : <AlertCircle size={15} />}
+      {toast.message}
     </div>
   );
 }
 
-export function SettingsPage() {
-  /* Notification prefs */
-  const [notifs, setNotifs] = useState({
-    likesComments: true,
-    eventUpdates: true,
-    newUploads: false,
-    weeklyDigest: true,
-    smsAlerts: false,
-    emailAlerts: true,
-    pushNotifs: true,
-  });
+function Toggle({ enabled, onToggle }: { enabled: boolean; onToggle: () => void }) {
+  return (
+    <button onClick={onToggle} style={{
+      width: 40, height: 22, borderRadius: 11, flexShrink: 0, border: "none",
+      background: enabled ? "#10b981" : "rgba(255,255,255,0.12)",
+      boxShadow: enabled ? "0 0 8px rgba(16,185,129,0.4)" : "none",
+      position: "relative", transition: "all 0.2s", cursor: "pointer",
+    }}>
+      <div style={{
+        position: "absolute", top: 2, width: 18, height: 18, borderRadius: 9,
+        background: "white", left: enabled ? 20 : 2, transition: "all 0.2s",
+        boxShadow: "0 1px 4px rgba(0,0,0,0.3)",
+      }} />
+    </button>
+  );
+}
 
-  /* Theme */
-  const [theme, setTheme] = useState<"dark" | "light" | "system">("dark");
+const card: React.CSSProperties = {
+  background: "rgba(11,18,32,0.8)", border: "1px solid rgba(16,185,129,0.1)",
+  borderRadius: 16, padding: 20,
+};
+const inputStyle: React.CSSProperties = {
+  width: "100%", padding: "12px 16px", borderRadius: 12, fontSize: 14,
+  outline: "none", background: "rgba(255,255,255,0.04)",
+  border: "1px solid rgba(16,185,129,0.15)", color: "#e8edf5", boxSizing: "border-box",
+};
+const btnGreen: React.CSSProperties = {
+  display: "flex", alignItems: "center", gap: 8, padding: "10px 16px",
+  borderRadius: 12, fontSize: 14, fontWeight: 500, cursor: "pointer",
+  background: "rgba(16,185,129,0.15)", border: "1px solid rgba(16,185,129,0.3)", color: "#10b981",
+};
+const btnRed: React.CSSProperties = {
+  display: "flex", alignItems: "center", gap: 8, padding: "10px 16px",
+  borderRadius: 12, fontSize: 14, fontWeight: 500, cursor: "pointer",
+  background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.25)", color: "#f87171",
+};
 
-  /* Privacy */
-  const [privacy, setPrivacy] = useState({
-    profilePublic: true,
-    showActivity: false,
-    allowTagging: true,
-    faceRecognition: true,
-    downloadProtection: false,
-  });
+function SectionHead({ title, desc }: { title: string; desc?: string }) {
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <h3 style={{ fontSize: 14, fontWeight: 600, color: "white", margin: 0 }}>{title}</h3>
+      {desc && <p style={{ fontSize: 12, color: "#6b7fa3", marginTop: 2, margin: 0 }}>{desc}</p>}
+    </div>
+  );
+}
 
-  /* Password */
-  const [showOld, setShowOld] = useState(false);
-  const [showNew, setShowNew] = useState(false);
-  const [passwords, setPasswords] = useState({ old: "", newPw: "", confirm: "" });
-  const [pwSaved, setPwSaved] = useState(false);
+export function SettingsPage({ onLogout }: { onLogout?: () => void }) {
+  const [toast, setToast] = useState<Toast>(null);
+  const fire = (type: "success" | "error", message: string) => setToast({ type, message });
 
-  /* Google */
-  const [googleConnected, setGoogleConnected] = useState(true);
+  // ── Edit Profile ──────────────────────────────────────────
+  const storedUser = getStoredUser();
+  const [profile, setProfile] = useState({ name: storedUser.name || "", bio: storedUser.bio || "" });
+  const [profileLoading, setProfileLoading] = useState(false);
 
-  const toggleNotif = (key: keyof typeof notifs) => setNotifs((n) => ({ ...n, [key]: !n[key] }));
-  const togglePrivacy = (key: keyof typeof privacy) => setPrivacy((p) => ({ ...p, [key]: !p[key] }));
-
-  const handleSavePw = () => {
-    if (passwords.newPw && passwords.newPw === passwords.confirm) {
-      setPwSaved(true);
-      setTimeout(() => { setPwSaved(false); setPasswords({ old: "", newPw: "", confirm: "" }); }, 2000);
-    }
+  const saveProfile = async () => {
+    if (!profile.name.trim() || profile.name.trim().length < 2)
+      return fire("error", "Name must be at least 2 characters.");
+    setProfileLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/auth/update-profile`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` },
+        body: JSON.stringify({ name: profile.name, bio: profile.bio }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message);
+      // Update stored user so other components reflect the change
+      const key = localStorage.getItem("token") ? "user" : "user";
+      const storage = localStorage.getItem("token") ? localStorage : sessionStorage;
+      storage.setItem("user", JSON.stringify(data.user));
+      fire("success", "Profile updated.");
+    } catch (e: any) { fire("error", e.message); }
+    finally { setProfileLoading(false); }
   };
 
+  // ── Notifications ─────────────────────────────────────────
+  const [unread, setUnread] = useState<number | null>(null);
+  const [markingRead, setMarkingRead] = useState(false);
+
+  const fetchUnread = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/notifications/unread-count`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      });
+      const data = await res.json();
+      if (data.success) setUnread(data.count);
+    } catch {}
+  }, []);
+
+  useEffect(() => { fetchUnread(); }, [fetchUnread]);
+
+  const markAllRead = async () => {
+    setMarkingRead(true);
+    try {
+      const res = await fetch(`${API_BASE}/notifications/read-all`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${getToken()}` },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message);
+      setUnread(0);
+      fire("success", "All notifications marked as read.");
+    } catch (e: any) { fire("error", e.message); }
+    finally { setMarkingRead(false); }
+  };
+
+  // ── Change Password ───────────────────────────────────────
+  const [showOld, setShowOld] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+  const [pw, setPw] = useState({ old: "", newPw: "", confirm: "" });
+  const [pwLoading, setPwLoading] = useState(false);
+
+  const changePassword = async () => {
+    if (!pw.old || !pw.newPw || !pw.confirm) return fire("error", "Fill in all fields.");
+    if (pw.newPw !== pw.confirm) return fire("error", "New passwords do not match.");
+    if (pw.newPw.length < 6) return fire("error", "New password must be at least 6 characters.");
+    setPwLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/auth/change-password`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` },
+        body: JSON.stringify({ currentPassword: pw.old, newPassword: pw.newPw }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message);
+      fire("success", "Password updated.");
+      setPw({ old: "", newPw: "", confirm: "" });
+    } catch (e: any) { fire("error", e.message); }
+    finally { setPwLoading(false); }
+  };
+
+  const strength = (() => {
+    const p = pw.newPw; let s = 0;
+    if (p.length >= 6) s++; if (p.length >= 10) s++;
+    if (/[A-Z]/.test(p) && /[a-z]/.test(p)) s++;
+    if (/\d/.test(p) && /[^a-zA-Z0-9]/.test(p)) s++;
+    return s;
+  })();
+
+  // ── App Preferences (UI-only, harmless) ──────────────────
+  const [prefs, setPrefs] = useState({
+    compactView: false,
+    showFileSizes: true,
+  });
+
   return (
-    <div className="p-6 max-w-3xl mx-auto space-y-8">
+    <div style={{ padding: 24, maxWidth: 672, margin: "0 auto", display: "flex", flexDirection: "column", gap: 32 }}>
+      <ToastBar toast={toast} onDismiss={() => setToast(null)} />
+
       <div>
-        <h2 className="text-xl font-bold text-white" style={{ fontFamily: "'Outfit', sans-serif" }}>Settings</h2>
-        <p className="text-sm" style={{ color: "#6b7fa3" }}>Manage your account preferences, privacy, and integrations</p>
+        <h2 style={{ fontSize: 20, fontWeight: 700, color: "white", fontFamily: "'Outfit',sans-serif", margin: 0 }}>Settings</h2>
+        <p style={{ fontSize: 14, color: "#6b7fa3", marginTop: 4 }}>Manage your account</p>
       </div>
 
-      {/* ─── Theme ─── */}
+      {/* ── Edit Profile ── */}
       <section>
-        <SectionHeader title="Appearance" desc="Choose how EventHub looks on your device" />
-        <div
-          className="p-5 rounded-2xl space-y-4"
-          style={{ background: "rgba(11,18,32,0.8)", border: "1px solid rgba(16,185,129,0.1)" }}
-        >
-          <div>
-            <p className="text-xs font-medium mb-3" style={{ color: "#6b7fa3" }}>Theme</p>
-            <div className="grid grid-cols-3 gap-3">
-              {([
-                { id: "dark", label: "Dark", icon: Moon, desc: "Deep navy, always" },
-                { id: "light", label: "Light", icon: Sun, desc: "Bright mode" },
-                { id: "system", label: "System", icon: Monitor, desc: "Follow device" },
-              ] as const).map(({ id, label, icon: Icon, desc }) => (
-                <button
-                  key={id}
-                  onClick={() => setTheme(id)}
-                  className="flex flex-col items-center gap-2 p-4 rounded-xl transition-all"
-                  style={{
-                    background: theme === id ? "rgba(16,185,129,0.1)" : "rgba(255,255,255,0.03)",
-                    border: `1px solid ${theme === id ? "rgba(16,185,129,0.4)" : "rgba(255,255,255,0.06)"}`,
-                  }}
-                >
-                  <Icon size={20} color={theme === id ? "#10b981" : "#6b7fa3"} />
-                  <span className="text-sm font-medium" style={{ color: theme === id ? "#10b981" : "white" }}>{label}</span>
-                  <span className="text-xs text-center" style={{ color: "#6b7fa3" }}>{desc}</span>
-                  {theme === id && <div className="w-1.5 h-1.5 rounded-full" style={{ background: "#10b981" }} />}
-                </button>
-              ))}
+        <SectionHead title="Edit Profile" desc="Update your display name and bio" />
+        <div style={{ ...card, display: "flex", flexDirection: "column", gap: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", borderRadius: 12, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
+            <div style={{ width: 40, height: 40, borderRadius: "50%", background: "rgba(16,185,129,0.15)", border: "1px solid rgba(16,185,129,0.3)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <User size={18} color="#10b981" />
             </div>
-          </div>
-
-          <div className="flex items-center justify-between py-2" style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }}>
             <div>
-              <p className="text-sm text-white">Reduce motion</p>
-              <p className="text-xs mt-0.5" style={{ color: "#6b7fa3" }}>Minimize animations across the interface</p>
+              <p style={{ fontSize: 14, fontWeight: 600, color: "white", margin: 0 }}>{storedUser.name || "—"}</p>
+              <p style={{ fontSize: 12, color: "#6b7fa3", margin: 0 }}>{storedUser.email || ""} · {storedUser.role || ""}</p>
             </div>
-            <Toggle enabled={false} onToggle={() => {}} />
           </div>
+
+          <div>
+            <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: "#6b7fa3", marginBottom: 6 }}>Name</label>
+            <input type="text" value={profile.name} maxLength={50}
+              onChange={(e) => setProfile(p => ({ ...p, name: e.target.value }))}
+              style={inputStyle}
+              onFocus={(e) => { e.currentTarget.style.borderColor = "rgba(16,185,129,0.5)"; }}
+              onBlur={(e)  => { e.currentTarget.style.borderColor = "rgba(16,185,129,0.15)"; }}
+            />
+          </div>
+          <div>
+            <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: "#6b7fa3", marginBottom: 6 }}>Bio</label>
+            <textarea value={profile.bio} maxLength={200}
+              onChange={(e) => setProfile(p => ({ ...p, bio: e.target.value }))}
+              rows={3}
+              style={{ ...inputStyle, resize: "vertical" }}
+              onFocus={(e) => { e.currentTarget.style.borderColor = "rgba(16,185,129,0.5)"; }}
+              onBlur={(e)  => { e.currentTarget.style.borderColor = "rgba(16,185,129,0.15)"; }}
+            />
+            <p style={{ fontSize: 11, color: "#6b7fa3", marginTop: 4, textAlign: "right" }}>{profile.bio.length}/200</p>
+          </div>
+          <button onClick={saveProfile} disabled={profileLoading} style={{ ...btnGreen, opacity: profileLoading ? 0.6 : 1 }}>
+            {profileLoading ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />}
+            {profileLoading ? "Saving…" : "Save Profile"}
+          </button>
         </div>
       </section>
 
-      {/* ─── Notifications ─── */}
+      {/* ── Notifications ── */}
       <section>
-        <SectionHeader title="Notification Preferences" desc="Control when and how you receive alerts" />
-        <div
-          className="p-5 rounded-2xl space-y-4"
-          style={{ background: "rgba(11,18,32,0.8)", border: "1px solid rgba(16,185,129,0.1)" }}
-        >
-          <p className="text-xs font-medium mb-1" style={{ color: "#6b7fa3" }}>
-            <Bell size={11} className="inline mr-1" />Activity
-          </p>
-          {[
-            { key: "likesComments" as const, label: "Likes & Comments", desc: "When someone interacts with your photos" },
-            { key: "eventUpdates" as const, label: "Event Updates", desc: "New events, date changes, cancellations" },
-            { key: "newUploads" as const, label: "New Photo Uploads", desc: "When photographers upload to events you attended" },
-            { key: "weeklyDigest" as const, label: "Weekly Digest", desc: "A summary of your activity every Monday" },
-          ].map(({ key, label, desc }) => (
-            <div key={key} className="flex items-center justify-between">
+        <SectionHead title="Notifications" desc="Your unread notification status" />
+        <div style={{ ...card, display: "flex", flexDirection: "column", gap: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", borderRadius: 12, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <Bell size={16} color={unread ? "#10b981" : "#6b7fa3"} />
               <div>
-                <p className="text-sm text-white">{label}</p>
-                <p className="text-xs mt-0.5" style={{ color: "#6b7fa3" }}>{desc}</p>
+                <p style={{ fontSize: 14, color: "white", margin: 0 }}>Unread Notifications</p>
+                <p style={{ fontSize: 12, color: "#6b7fa3", margin: 0 }}>
+                  {unread === null ? "Loading…" : unread === 0 ? "You're all caught up" : `${unread} unread`}
+                </p>
               </div>
-              <Toggle enabled={notifs[key]} onToggle={() => toggleNotif(key)} />
             </div>
-          ))}
-
-          <div style={{ borderTop: "1px solid rgba(255,255,255,0.05)", paddingTop: 16 }}>
-            <p className="text-xs font-medium mb-3" style={{ color: "#6b7fa3" }}>Channels</p>
-            {[
-              { key: "pushNotifs" as const, label: "Push Notifications", icon: Smartphone, desc: "Browser & mobile push" },
-              { key: "emailAlerts" as const, label: "Email Alerts", icon: Mail, desc: "Sent to arjun.mehta@university.edu" },
-              { key: "smsAlerts" as const, label: "SMS Alerts", icon: Smartphone, desc: "Critical alerts only" },
-            ].map(({ key, label, icon: Icon, desc }) => (
-              <div key={key} className="flex items-center justify-between mb-3 last:mb-0">
-                <div className="flex items-center gap-3">
-                  <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: "rgba(255,255,255,0.04)" }}>
-                    <Icon size={14} color="#6b7fa3" />
-                  </div>
-                  <div>
-                    <p className="text-sm text-white">{label}</p>
-                    <p className="text-xs" style={{ color: "#6b7fa3" }}>{desc}</p>
-                  </div>
-                </div>
-                <Toggle enabled={notifs[key]} onToggle={() => toggleNotif(key)} />
-              </div>
-            ))}
+            {unread !== null && unread > 0 && (
+              <span style={{ fontSize: 12, fontWeight: 700, padding: "2px 8px", borderRadius: 20, background: "rgba(16,185,129,0.2)", color: "#10b981", border: "1px solid rgba(16,185,129,0.3)" }}>
+                {unread}
+              </span>
+            )}
+          </div>
+          {unread !== null && unread > 0 && (
+            <button onClick={markAllRead} disabled={markingRead} style={{ ...btnGreen, opacity: markingRead ? 0.6 : 1 }}>
+              {markingRead ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />}
+              {markingRead ? "Marking…" : "Mark All as Read"}
+            </button>
+          )}
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "10px 14px", borderRadius: 10, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)" }}>
+            <Info size={13} color="#6b7fa3" style={{ marginTop: 2, flexShrink: 0 }} />
+            <p style={{ fontSize: 12, color: "#6b7fa3", margin: 0 }}>
+              To view all notifications, visit the Notifications page from the sidebar.
+            </p>
           </div>
         </div>
       </section>
 
-      {/* ─── Password ─── */}
+      {/* ── Change Password ── */}
       <section>
-        <SectionHeader title="Password & Security" desc="Update your credentials and secure your account" />
-        <div
-          className="p-5 rounded-2xl space-y-4"
-          style={{ background: "rgba(11,18,32,0.8)", border: "1px solid rgba(16,185,129,0.1)" }}
-        >
+        <SectionHead title="Change Password" desc="Update your account password" />
+        <div style={{ ...card, display: "flex", flexDirection: "column", gap: 16 }}>
           {[
-            { key: "old", label: "Current Password", show: showOld, toggle: () => setShowOld(!showOld) },
-            { key: "newPw", label: "New Password", show: showNew, toggle: () => setShowNew(!showNew) },
-            { key: "confirm", label: "Confirm New Password", show: showNew, toggle: () => setShowNew(!showNew) },
+            { key: "old",     label: "Current Password", show: showOld, toggle: () => setShowOld(v => !v) },
+            { key: "newPw",   label: "New Password",      show: showNew, toggle: () => setShowNew(v => !v) },
+            { key: "confirm", label: "Confirm Password",  show: showNew, toggle: () => setShowNew(v => !v) },
           ].map(({ key, label, show, toggle }) => (
             <div key={key}>
-              <label className="block text-xs font-medium mb-1.5" style={{ color: "#6b7fa3" }}>{label}</label>
-              <div className="relative">
-                <input
-                  type={show ? "text" : "password"}
-                  placeholder="••••••••"
-                  value={passwords[key as keyof typeof passwords]}
-                  onChange={(e) => setPasswords((p) => ({ ...p, [key]: e.target.value }))}
-                  className="w-full px-4 py-3 pr-11 rounded-xl text-sm outline-none transition-all"
-                  style={{
-                    background: "rgba(255,255,255,0.04)",
-                    border: "1px solid rgba(16,185,129,0.15)",
-                    color: "#e8edf5",
-                  }}
+              <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: "#6b7fa3", marginBottom: 6 }}>{label}</label>
+              <div style={{ position: "relative" }}>
+                <input type={show ? "text" : "password"} placeholder="••••••••"
+                  value={pw[key as keyof typeof pw]}
+                  onChange={(e) => setPw(p => ({ ...p, [key]: e.target.value }))}
+                  style={{ ...inputStyle, paddingRight: 44 }}
                   onFocus={(e) => { e.currentTarget.style.borderColor = "rgba(16,185,129,0.5)"; }}
-                  onBlur={(e) => { e.currentTarget.style.borderColor = "rgba(16,185,129,0.15)"; }}
+                  onBlur={(e)  => { e.currentTarget.style.borderColor = "rgba(16,185,129,0.15)"; }}
                 />
-                <button
-                  onClick={toggle}
-                  className="absolute right-3 top-1/2 -translate-y-1/2"
-                  style={{ color: "#6b7fa3" }}
-                >
+                <button onClick={toggle} style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", color: "#6b7fa3", background: "none", border: "none", cursor: "pointer" }}>
                   {show ? <EyeOff size={15} /> : <Eye size={15} />}
                 </button>
               </div>
             </div>
           ))}
 
-          {/* Password strength */}
-          {passwords.newPw && (
+          {pw.newPw && (
             <div>
-              <p className="text-xs mb-1.5" style={{ color: "#6b7fa3" }}>Password strength</p>
-              <div className="flex gap-1">
-                {[1, 2, 3, 4].map((i) => (
-                  <div
-                    key={i}
-                    className="flex-1 h-1 rounded-full"
-                    style={{
-                      background: passwords.newPw.length >= i * 3
-                        ? i < 3 ? "#f59e0b" : "#10b981"
-                        : "rgba(255,255,255,0.08)",
-                    }}
-                  />
+              <p style={{ fontSize: 12, color: "#6b7fa3", marginBottom: 6 }}>Password strength</p>
+              <div style={{ display: "flex", gap: 4 }}>
+                {[1,2,3,4].map(i => (
+                  <div key={i} style={{ flex: 1, height: 4, borderRadius: 4, transition: "background 0.3s",
+                    background: i > strength ? "rgba(255,255,255,0.08)" : strength <= 1 ? "#ef4444" : strength <= 2 ? "#f59e0b" : "#10b981" }} />
                 ))}
               </div>
             </div>
           )}
 
-          <button
-            onClick={handleSavePw}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium text-white transition-all hover:scale-105"
-            style={{
-              background: pwSaved ? "rgba(16,185,129,0.2)" : "rgba(16,185,129,0.15)",
-              border: "1px solid rgba(16,185,129,0.3)",
-              color: "#10b981",
-            }}
-          >
-            {pwSaved ? <><Check size={15} /> Password Updated!</> : <><Lock size={15} /> Update Password</>}
+          {pw.confirm && pw.newPw !== pw.confirm && (
+            <p style={{ fontSize: 12, color: "#f87171", display: "flex", alignItems: "center", gap: 6, margin: 0 }}>
+              <AlertCircle size={12} /> Passwords do not match
+            </p>
+          )}
+
+          <button onClick={changePassword} disabled={pwLoading} style={{ ...btnGreen, opacity: pwLoading ? 0.6 : 1 }}>
+            {pwLoading ? <Loader2 size={15} className="animate-spin" /> : <Lock size={15} />}
+            {pwLoading ? "Updating…" : "Update Password"}
           </button>
         </div>
       </section>
 
-      {/* ─── Privacy ─── */}
+      {/* ── App Preferences (UI-only) ── */}
       <section>
-        <SectionHeader title="Privacy Controls" desc="Manage who can see your profile and interact with your content" />
-        <div
-          className="p-5 rounded-2xl space-y-4"
-          style={{ background: "rgba(11,18,32,0.8)", border: "1px solid rgba(16,185,129,0.1)" }}
-        >
+        <SectionHead title="Display Preferences" desc="Visual options — saved in this browser" />
+        <div style={{ ...card, display: "flex", flexDirection: "column", gap: 16 }}>
           {[
-            { key: "profilePublic" as const, label: "Public Profile", desc: "Allow anyone to view your profile and uploads" },
-            { key: "showActivity" as const, label: "Show Activity Status", desc: "Let others see when you were last active" },
-            { key: "allowTagging" as const, label: "Allow Photo Tagging", desc: "Let others tag you in photos" },
-            { key: "faceRecognition" as const, label: "Facial Recognition", desc: "Allow AI to identify your face in event photos" },
-            { key: "downloadProtection" as const, label: "Download Protection", desc: "Add watermark to all downloaded copies of your uploads" },
+            { key: "compactView"    as const, label: "Compact View",      desc: "Reduce spacing in gallery and lists" },
+            { key: "showFileSizes"  as const, label: "Show File Sizes",   desc: "Display file size under each photo" },
           ].map(({ key, label, desc }) => (
-            <div key={key} className="flex items-center justify-between">
-              <div className="flex items-start gap-3">
-                <Shield size={15} color="#6b7fa3" className="mt-0.5 flex-shrink-0" />
-                <div>
-                  <p className="text-sm text-white">{label}</p>
-                  <p className="text-xs mt-0.5" style={{ color: "#6b7fa3" }}>{desc}</p>
-                </div>
+            <div key={key} style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div>
+                <p style={{ fontSize: 14, color: "white", margin: 0 }}>{label}</p>
+                <p style={{ fontSize: 12, color: "#6b7fa3", margin: 0 }}>{desc}</p>
               </div>
-              <Toggle enabled={privacy[key]} onToggle={() => togglePrivacy(key)} />
+              <Toggle enabled={prefs[key]} onToggle={() => setPrefs(p => ({ ...p, [key]: !p[key] }))} />
             </div>
           ))}
         </div>
       </section>
 
-      {/* ─── Connected accounts ─── */}
+      {/* ── Account ── */}
       <section>
-        <SectionHeader title="Connected Accounts" desc="Manage external integrations" />
-        <div
-          className="p-5 rounded-2xl space-y-3"
-          style={{ background: "rgba(11,18,32,0.8)", border: "1px solid rgba(16,185,129,0.1)" }}
-        >
-          <div className="flex items-center gap-4 p-3 rounded-xl" style={{ background: "rgba(255,255,255,0.03)" }}>
-            <div
-              className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-              style={{ background: "rgba(255,255,255,0.06)" }}
-            >
-              <Chrome size={20} color="#6b7fa3" />
-            </div>
-            <div className="flex-1">
-              <p className="text-sm font-medium text-white">Google Account</p>
-              <p className="text-xs" style={{ color: googleConnected ? "#10b981" : "#6b7fa3" }}>
-                {googleConnected ? "Connected · arjun.mehta@gmail.com" : "Not connected"}
-              </p>
-            </div>
-            <button
-              onClick={() => setGoogleConnected(!googleConnected)}
-              className="px-3 py-1.5 rounded-xl text-xs font-medium transition-all hover:scale-105"
-              style={googleConnected
-                ? { background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", color: "#f87171" }
-                : { background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.3)", color: "#10b981" }
-              }
-            >
-              {googleConnected ? "Disconnect" : "Connect"}
-            </button>
-          </div>
-
-          {[
-            { name: "Institution SSO", detail: "Single sign-on via university portal", connected: true, icon: Globe },
-            { name: "Cloud Storage", detail: "Google Drive integration", connected: false, icon: Globe },
-          ].map(({ name, detail, connected, icon: Icon }) => (
-            <div key={name} className="flex items-center gap-4 p-3 rounded-xl" style={{ background: "rgba(255,255,255,0.03)" }}>
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: "rgba(255,255,255,0.06)" }}>
-                <Icon size={20} color="#6b7fa3" />
-              </div>
-              <div className="flex-1">
-                <p className="text-sm font-medium text-white">{name}</p>
-                <p className="text-xs" style={{ color: connected ? "#10b981" : "#6b7fa3" }}>{detail}</p>
-              </div>
-              <div className="flex items-center gap-2">
-                {connected && <span className="w-2 h-2 rounded-full" style={{ background: "#10b981" }} />}
-                <ChevronRight size={15} color="#6b7fa3" />
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Danger zone */}
-      <section>
-        <div
-          className="p-5 rounded-2xl"
-          style={{ background: "rgba(239,68,68,0.04)", border: "1px solid rgba(239,68,68,0.15)" }}
-        >
-          <p className="text-sm font-semibold mb-1" style={{ color: "#f87171" }}>Danger Zone</p>
-          <p className="text-xs mb-4" style={{ color: "#6b7fa3" }}>These actions are irreversible. Proceed with caution.</p>
-          <div className="flex gap-3">
-            <button
-              className="px-4 py-2 rounded-xl text-sm transition-all hover:scale-105"
-              style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#f87171" }}
-            >
-              Deactivate Account
-            </button>
-            <button
-              className="px-4 py-2 rounded-xl text-sm transition-all hover:scale-105"
-              style={{ background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.4)", color: "#f87171" }}
-            >
-              Delete Account
-            </button>
-          </div>
+        <SectionHead title="Account" />
+        <div style={{ ...card }}>
+          <button onClick={onLogout} style={btnRed}>
+            <LogOut size={15} /> Sign Out
+          </button>
         </div>
       </section>
     </div>

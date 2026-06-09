@@ -13,7 +13,7 @@ const eventRoutes = require("./routes/eventRoutes");
 const mediaRoutes = require("./routes/mediaRoutes");
 // Load environment variables FIRST (before anything else)
 const commentRoutes = require("./routes/commentRoutes");
-
+const notificationRoutes = require("./routes/notificationRoutes");
 // const result = dotenv.config();
 // console.log(result);
 // Connect to MongoDB
@@ -50,6 +50,7 @@ app.use("/api/auth", require("./routes/authRoutes"));
 app.use("/api/events", eventRoutes);
 app.use("/api/media", mediaRoutes);
 app.use("/api/comments", commentRoutes);
+app.use("/api/notifications", notificationRoutes);
 // Root health check
 app.get("/", (req, res) => {
   res.json({

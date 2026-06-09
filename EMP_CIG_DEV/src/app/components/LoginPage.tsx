@@ -35,9 +35,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
   const [view, setView] = useState<"login" | "signup">("login");
 
   // ── Login state ────────────────────────────────────────────────────────────
-  const [activeTab, setActiveTab] = useState<"enrollment" | "email">("enrollment");
   const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(false);
   const [selectedRole, setSelectedRole] = useState("viewer");
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
@@ -86,9 +84,8 @@ export function LoginPage({ onLogin }: LoginPageProps) {
         setErrorMessage(data.message || "Login failed. Please try again.");
         return;
       }
-      const storage = rememberMe ? localStorage : sessionStorage;
-      storage.setItem("token", data.token);
-      storage.setItem("user", JSON.stringify(data.user));
+      localStorage.setItem("token", data.token);
+      localStorage.setItem("user", JSON.stringify(data.user));
       onLogin(data.user?.role ?? selectedRole, data.token, data.user);
     } catch {
       setErrorMessage("Unable to connect to the server. Please try again.");
@@ -268,7 +265,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
           <>
             <div className="mb-7">
               <h2 className="text-2xl font-bold text-white mb-1" style={{ fontFamily: "'Outfit', sans-serif" }}>
-                Welcome back
+                Sign in to EventHub
               </h2>
               <p className="text-sm" style={{ color: "#6b7fa3" }}>Sign in to your EventHub account</p>
             </div>
@@ -292,34 +289,15 @@ export function LoginPage({ onLogin }: LoginPageProps) {
               ))}
             </div>
 
-            {/* Tab switcher */}
-            <div className="flex rounded-lg mb-6 p-1" style={{ background: "rgba(255,255,255,0.04)" }}>
-              {(["enrollment", "email"] as const).map((tab) => (
-                <button
-                  key={tab}
-                  onClick={() => { setActiveTab(tab); setIdentifier(""); setErrorMessage(""); }}
-                  className="flex-1 py-2 rounded-md text-sm transition-all duration-200"
-                  style={{
-                    background: activeTab === tab ? "rgba(16,185,129,0.15)" : "transparent",
-                    color: activeTab === tab ? "#10b981" : "#6b7fa3",
-                    fontWeight: activeTab === tab ? 600 : 400,
-                    border: activeTab === tab ? "1px solid rgba(16,185,129,0.3)" : "1px solid transparent",
-                  }}
-                >
-                  {tab === "enrollment" ? "Enrollment No." : "Email"}
-                </button>
-              ))}
-            </div>
-
             {/* Inputs */}
             <div className="space-y-4 mb-4">
               <div>
                 <label className="block text-xs font-medium mb-1.5" style={{ color: "#6b7fa3" }}>
-                  {activeTab === "enrollment" ? "Enrollment Number" : "Email Address"}
+                  Email Address
                 </label>
                 <input
-                  type={activeTab === "enrollment" ? "text" : "email"}
-                  placeholder={activeTab === "enrollment" ? "e.g. 2023CS0142" : "you@university.edu"}
+                  type="email"
+                  placeholder="you@university.edu"
                   value={identifier}
                   onChange={(e) => { setIdentifier(e.target.value); setErrorMessage(""); }}
                   className="w-full px-4 py-3 rounded-xl text-sm outline-none transition-all duration-200"
@@ -367,21 +345,8 @@ export function LoginPage({ onLogin }: LoginPageProps) {
               </div>
             )}
 
-            {/* Remember + forgot */}
-            <div className="flex items-center justify-between mb-6">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <div
-                  onClick={() => setRememberMe(!rememberMe)}
-                  className="w-4 h-4 rounded flex items-center justify-center cursor-pointer transition-all"
-                  style={{
-                    background: rememberMe ? "#10b981" : "transparent",
-                    border: `1.5px solid ${rememberMe ? "#10b981" : "rgba(255,255,255,0.2)"}`,
-                  }}
-                >
-                  {rememberMe && <span className="text-white text-xs">✓</span>}
-                </div>
-                <span className="text-xs" style={{ color: "#6b7fa3" }}>Remember me</span>
-              </label>
+            {/* Forgot password */}
+            <div className="flex items-center justify-end mb-6">
               <button className="text-xs transition-colors hover:text-emerald-400" style={{ color: "#10b981" }}>
                 Forgot Password?
               </button>

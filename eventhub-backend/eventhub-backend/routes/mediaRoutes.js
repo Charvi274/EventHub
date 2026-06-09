@@ -5,11 +5,12 @@ const {
   uploadMedia,
   getAllMedia,
   getMediaByEvent,
+  getMyUploads,
   deleteMedia,
   likeMedia,
   downloadMedia,
-  saveMedia,       
-  getSavedMedia,   
+  saveMedia,
+  getSavedMedia,
 } = require("../controllers/mediaController");
 
 // ─────────────────────────────────────────────
@@ -70,6 +71,7 @@ router.get("/:id/download", protect, downloadMedia);
 // DELETE /api/media/:id              → Delete media
 // Admin (any) | Photographer & ClubMember (own only)
 router.get("/saved", protect, getSavedMedia);
+router.get("/my-uploads", protect, getMyUploads);
 router.delete(
   "/:id",
   protect,

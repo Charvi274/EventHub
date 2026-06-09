@@ -1,5 +1,7 @@
+// controllers/commentController.js
 const Comment = require("../models/Comment");
 const Media   = require("../models/Media");
+const { createNotification } = require("../utils/notificationUtils");
 
 // ─────────────────────────────────────────────
 // @desc    Get all comments for a media item
@@ -71,7 +73,9 @@ const addComment = async (req, res) => {
     }
 
     // ── Verify parent media exists ───────────
-    const media = await Media.findById(mediaId).select("_id");
+    // Select uploadedBy and fileUrl so we can notify the owner
+    // and denormalize the thumbnail without an extra query.
+    const media = await Media.findById(mediaId).select("_id title fileUrl uploadedBy");
     if (!media) {
       return res.status(404).json({
         success: false,
@@ -89,6 +93,19 @@ const addComment = async (req, res) => {
     // Populate author so the frontend gets name + role immediately —
     // no extra fetch required after posting.
     const populated = await comment.populate("author", "name role avatar");
+
+    // ── Notify media owner (fire-and-forget) ─
+    // createNotification silently swallows errors so a notification
+    // failure never affects the comment response.
+    await createNotification({
+      recipientId: media.uploadedBy,
+      actorId:     req.user._id,
+      actorName:   req.user.name,
+      type:        "comment",
+      mediaId:     media._id,
+      mediaTitle:  media.title,
+      mediaThumb:  media.fileUrl,
+    });
 
     return res.status(201).json({
       success: true,

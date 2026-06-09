@@ -6,6 +6,65 @@
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 
+// ─────────────────────────────────────────────
+//  Watermark settings sub-schema
+//  Stored per-user; read by downloadMedia on
+//  every download request.
+// ─────────────────────────────────────────────
+const watermarkSettingsSchema = new mongoose.Schema(
+  {
+    enabled: {
+      type: Boolean,
+      default: true,
+    },
+    clubName: {
+      type: String,
+      default: "",
+      maxlength: [100, "Club name cannot exceed 100 characters"],
+      trim: true,
+    },
+    eventName: {
+      type: String,
+      default: "",
+      maxlength: [100, "Event name cannot exceed 100 characters"],
+      trim: true,
+    },
+    includeRole: {
+      type: Boolean,
+      default: true,
+    },
+    includeDate: {
+      type: Boolean,
+      default: true,
+    },
+    includeIcon: {
+      type: Boolean,
+      default: true,
+    },
+    position: {
+      type: String,
+      enum: {
+        values: ["bottom-right", "bottom-left", "top-right", "center"],
+        message: "{VALUE} is not a valid watermark position",
+      },
+      default: "bottom-right",
+    },
+    opacity: {
+      type: Number,
+      enum: {
+        values: [15, 25, 40, 60, 80],
+        message: "{VALUE} is not a valid opacity value",
+      },
+      default: 25,
+    },
+    applyAll: {
+      type: Boolean,
+      default: false,
+    },
+  },
+  { _id: false } // embedded sub-doc; no separate _id needed
+);
+
 const UserSchema = new mongoose.Schema(
   {
     // ── Basic Info ──────────────────────────────
@@ -69,6 +128,12 @@ const UserSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+
+    // ── Watermark ───────────────────────────────
+    watermarkSettings: {
+      type: watermarkSettingsSchema,
+      default: () => ({}), // applies all sub-schema defaults on new users
+    },
   },
   {
     timestamps: true, // Adds createdAt and updatedAt automatically
@@ -110,6 +175,7 @@ UserSchema.methods.toSafeObject = function () {
     lastLogin: this.lastLogin,
     createdAt: this.createdAt,
     updatedAt: this.updatedAt,
+    watermarkSettings: this.watermarkSettings,
   };
 };
 

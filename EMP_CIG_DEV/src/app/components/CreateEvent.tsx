@@ -16,7 +16,7 @@ import {
 // ─────────────────────────────────────────────────────────────
 interface CreateEventProps {
   onBack: () => void;
-  onCreated: () => void;
+  onCreated: (eventId: string) => void;
   user?: {
     name?: string;
     email?: string;
@@ -118,7 +118,7 @@ async function uploadCoverImage(file: File): Promise<string> {
  *
  * Auth: Authorization: Bearer <token>
  */
-async function createEventAPI(payload: object): Promise<void> {
+async function createEventAPI(payload: object): Promise<string> {
   const res = await fetch("/api/events", {
     method: "POST",
     headers: {
@@ -132,6 +132,7 @@ async function createEventAPI(payload: object): Promise<void> {
   if (!res.ok || !data.success) {
     throw new Error(data.message || "Failed to create event.");
   }
+  return data.data._id;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -275,14 +276,14 @@ export function CreateEvent({ onBack, onCreated, user }: CreateEventProps) {
       };
 
       // ── Step 3: create event via REST API ─────────────────
-      await createEventAPI(payload);
+      const newEventId = await createEventAPI(payload);
 
       setSubmitting(false);
       setSubmitted(true);
       setStatusMsg("Event created!");
 
       // Redirect after brief confirmation
-      setTimeout(onCreated, 1200);
+      setTimeout(() => onCreated(newEventId), 1200);
     } catch (err: unknown) {
       setSubmitting(false);
       setStatusMsg("");

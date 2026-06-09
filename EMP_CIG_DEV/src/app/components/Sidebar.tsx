@@ -5,6 +5,7 @@ interface SidebarProps {
   onNavigate: (screen: string) => void;
   onLogout: () => void;
   user: Record<string, unknown>;
+  unreadCount?: number;
 }
 
 const navItems = [
@@ -14,7 +15,8 @@ const navItems = [
   { id: "upload",        label: "Upload Media",  icon: Upload,          roles: ["Admin", "Photographer"] },
   { id: "myphotos",      label: "My Photos",     icon: Camera,          roles: ["Admin", "Photographer", "Club Member", "Viewer"] },
   { id: "favorites",     label: "Favorites",     icon: Star,            roles: ["Admin", "Photographer", "Club Member", "Viewer"] },
-  { id: "notifications", label: "Notifications", icon: Bell, badge: 5,  roles: ["Admin", "Photographer", "Club Member", "Viewer"] },
+  // notifications badge is injected dynamically in Sidebar body below
+  { id: "notifications", label: "Notifications", icon: Bell,            roles: ["Admin", "Photographer", "Club Member", "Viewer"] },
 ];
 
 const bottomNav = [
@@ -59,12 +61,12 @@ function NavItem({ id, label, icon: Icon, badge, currentScreen, onNavigate }: {
       )}
       <Icon size={17} />
       <span className="flex-1 text-left">{label}</span>
-      {badge && (
+      {badge !== undefined && badge > 0 && (
         <span
           className="text-xs px-1.5 py-0.5 rounded-full"
           style={{ background: "rgba(16,185,129,0.2)", color: "#10b981" }}
         >
-          {badge}
+          {badge > 99 ? "99+" : badge}
         </span>
       )}
       {active && <ChevronRight size={14} />}
@@ -72,7 +74,7 @@ function NavItem({ id, label, icon: Icon, badge, currentScreen, onNavigate }: {
   );
 }
 
-export function Sidebar({ currentScreen, onNavigate, onLogout, user }: SidebarProps) {
+export function Sidebar({ currentScreen, onNavigate, onLogout, user, unreadCount = 0 }: SidebarProps) {
   const role = typeof user?.role === "string" ? user.role : "Viewer";
   const visibleNav    = navItems.filter((item) => item.roles.includes(role));
   const visibleBottom = bottomNav.filter((item) => item.roles.includes(role));
@@ -109,7 +111,14 @@ export function Sidebar({ currentScreen, onNavigate, onLogout, user }: SidebarPr
       {/* Main nav */}
       <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
         {visibleNav.map((item) => (
-          <NavItem key={item.id} {...item} currentScreen={currentScreen} onNavigate={onNavigate} />
+          <NavItem
+            key={item.id}
+            {...item}
+            // Inject live unread count only on the notifications item
+            badge={item.id === "notifications" ? unreadCount : undefined}
+            currentScreen={currentScreen}
+            onNavigate={onNavigate}
+          />
         ))}
 
         {/* Divider */}
