@@ -214,15 +214,6 @@ export function LoginPage({ onLogin }: LoginPageProps) {
           ))}
         </div>
       </div>
-
-      <div className="relative z-10 flex gap-8">
-        {[["12K+", "Events"], ["180K+", "Photos"], ["3K+", "Clubs"]].map(([num, label]) => (
-          <div key={label}>
-            <p className="text-2xl font-bold" style={{ color: "#10b981", fontFamily: "'Outfit', sans-serif" }}>{num}</p>
-            <p className="text-xs" style={{ color: "#6b7fa3" }}>{label}</p>
-          </div>
-        ))}
-      </div>
     </div>
   );
 
@@ -344,13 +335,6 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                 {errorMessage}
               </div>
             )}
-
-            {/* Forgot password */}
-            <div className="flex items-center justify-end mb-6">
-              <button className="text-xs transition-colors hover:text-emerald-400" style={{ color: "#10b981" }}>
-                Forgot Password?
-              </button>
-            </div>
 
             {/* Sign in button */}
             <button
