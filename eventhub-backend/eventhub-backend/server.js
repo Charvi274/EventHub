@@ -31,6 +31,7 @@ app.use(
     origin: [
       "http://localhost:3000", // React default port
       "http://localhost:5173", // Vite default port
+      "https://event-hub-navy-delta.vercel.app",
     ],
     credentials: true,
   })
