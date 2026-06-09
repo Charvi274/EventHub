@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import {
-  ArrowLeft, Heart, MessageCircle, Share2, Download,
-  Bookmark, UserPlus, Send, MoreHorizontal, Sparkles, Trash2,
+  ArrowLeft, Heart, MessageCircle, Download,
+  Bookmark, Send, MoreHorizontal, Sparkles, Trash2,
 } from "lucide-react";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -507,15 +507,7 @@ const handleSave = async () => {
           </button>
 
           <div className="flex gap-2 ml-auto flex-wrap">
-            {/* Share — UI only */}
-            <button
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs transition-all hover:bg-white/5"
-              style={{ border: "1px solid rgba(255,255,255,0.08)", color: "#6b7fa3" }}
-              title="Share"
-            >
-              <Share2 size={14} /> Share
-            </button>
-
+            
             {/* Download */}
             <button
               onClick={handleDownload}
@@ -527,15 +519,7 @@ const handleSave = async () => {
               <Download size={14} /> {downloadLoading ? "…" : "Download"}
             </button>
 
-            {/* Tag — UI only */}
-            <button
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs transition-all hover:bg-white/5"
-              style={{ border: "1px solid rgba(255,255,255,0.08)", color: "#6b7fa3" }}
-              title="Tag"
-            >
-              <UserPlus size={14} /> Tag
-            </button>
-
+        
             {/* Save / Bookmark — local state only (no backend yet) */}
             
           </div>

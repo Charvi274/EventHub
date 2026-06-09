@@ -23,7 +23,12 @@ interface MediaItem {
   fileUrl: string;
   fileType: "image" | "video";
   title: string;
-  likes: { count: number };
+  tags: string[];
+  likes: { count: number; likedBy: string[] };
+  downloads: number;
+  createdAt: string;
+  eventId?: { _id: string; title: string; category?: string; startDate?: string };
+  uploadedBy?: { _id: string; name: string; email: string; role: string };
 }
 
 interface EventDetailsProps {
@@ -325,7 +330,7 @@ export function EventDetails({ eventId, onBack, onNavigate, user }: EventDetails
               key={item._id}
               className="relative group rounded-xl overflow-hidden break-inside-avoid cursor-pointer"
               style={{ background: "#0b1220" }}
-              onClick={() => onNavigate("photodetails", { _id: item._id, title: item.title, fileUrl: item.fileUrl, fileType: item.fileType, tags: [], likes: { count: item.likes.count, likedBy: [] }, downloads: 0, createdAt: "" })}
+              onClick={() => onNavigate("photodetails", item as import("./Gallery").BackendMedia)}
             >
               {item.fileType === "video" && (
                 <div className="absolute top-2 right-2 z-10 w-7 h-7 rounded-full flex items-center justify-center" style={{ background: "rgba(0,0,0,0.6)" }}>

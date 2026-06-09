@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
 import { Camera, Calendar, Image, Video, Users, TrendingUp, Plus, Eye, Heart, Sparkles, Clock, MapPin, ArrowRight } from "lucide-react";
+import type { BackendMedia } from "./Gallery";
 
 interface DashboardProps {
-  onNavigate: (screen: string) => void;
+  onNavigate: (screen: string, media?: BackendMedia, eventId?: string) => void;
   user?: {
     name?: string;
     email?: string;
@@ -38,7 +39,6 @@ interface UpcomingEvent {
   venue: string;
 }
 
-// ── Constants ────────────────────────────────────────────────────────────────
 const FALLBACK_IMAGE =
   "https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=400&h=220&fit=crop&auto=format";
 
@@ -81,22 +81,18 @@ function getToken(): string {
   return localStorage.getItem("token") || sessionStorage.getItem("token") || "";
 }
 
-// ── Component ────────────────────────────────────────────────────────────────
 export function Dashboard({ onNavigate, user }: DashboardProps) {
   const role = user?.role?.trim() || "Viewer";
 
-  // events (existing)
   const [allEvents, setAllEvents] = useState<BackendEvent[]>([]);
-  const [loading, setLoading]     = useState(true);
+  const [loading, setLoading] = useState(true);
 
-  // new stats from media + users APIs
-  const [totalMedia,    setTotalMedia]    = useState<number | null>(null);
-  const [totalUsers,    setTotalUsers]    = useState<number | null>(null);
+  const [totalMedia, setTotalMedia] = useState<number | null>(null);
+  const [totalUsers, setTotalUsers] = useState<number | null>(null);
   const [trendingPhotos, setTrendingPhotos] = useState<string[]>(FALLBACK_TRENDING);
-  // per-event photo counts: { [eventId]: number }
+  const [trendingRaw, setTrendingRaw] = useState<BackendMedia[]>([]);
   const [eventPhotoCounts, setEventPhotoCounts] = useState<Record<string, number>>({});
 
-  // ── Fetch events ───────────────────────────────────────────────────────────
   useEffect(() => {
     const fetchEvents = async () => {
       try {
@@ -125,41 +121,37 @@ export function Dashboard({ onNavigate, user }: DashboardProps) {
     fetchEvents();
   }, []);
 
-  // ── Fetch media stats + trending + user count ──────────────────────────────
   useEffect(() => {
     const headers = {
       "Content-Type": "application/json",
       Authorization: `Bearer ${getToken()}`,
     };
 
-    // Total media count — GET /api/media?limit=1 returns total in response
     fetch("/api/media?limit=1", { headers })
-      .then((r) => r.ok ? r.json() : null)
+      .then((r) => (r.ok ? r.json() : null))
       .then((data) => { if (data?.total != null) setTotalMedia(data.total); })
       .catch(() => {});
 
-    // Trending media — top 6 by most liked
-    // getAllMedia supports sortBy and order params
+    // Trending: keep setTrendingRaw INSIDE the .then so `list` is in scope
     fetch("/api/media?limit=6&sortBy=likes.count&order=desc", { headers })
-      .then((r) => r.ok ? r.json() : null)
+      .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
-        const list = Array.isArray(data?.data) ? data.data : [];
-        const urls: string[] = list
-          .filter((m: { fileType: string }) => m.fileType === "image")
-          .map((m: { fileUrl: string }) => m.fileUrl);
-        if (urls.length > 0) setTrendingPhotos(urls);
+        const list: BackendMedia[] = Array.isArray(data?.data) ? data.data : [];
+        const imageList = list.filter((m) => m.fileType === "image").slice(0, 6);
+        const urls = imageList.map((m) => m.fileUrl);
+        if (urls.length > 0) {
+          setTrendingPhotos(urls);
+          setTrendingRaw(imageList);
+        }
       })
       .catch(() => {});
 
-    // Total users — GET /api/users/count (one new endpoint, see backend change above)
     fetch("/api/auth/users/count", { headers })
-      .then((r) => r.ok ? r.json() : null)
+      .then((r) => (r.ok ? r.json() : null))
       .then((data) => { if (data?.count != null) setTotalUsers(data.count); })
-      .catch(() => {}); // gracefully stays "—" if endpoint doesn't exist yet
+      .catch(() => {});
   }, []);
 
-  // ── Fetch per-event photo counts for the 3 most recent events ─────────────
-  // Runs after allEvents is populated
   useEffect(() => {
     if (allEvents.length === 0) return;
     const headers = {
@@ -167,16 +159,14 @@ export function Dashboard({ onNavigate, user }: DashboardProps) {
       Authorization: `Bearer ${getToken()}`,
     };
 
-    // Take the 3 most recent events and fetch their media counts
     const recentIds = [...allEvents]
       .sort((a, b) => b.startDate.localeCompare(a.startDate))
       .slice(0, 3)
       .map((e) => e._id);
 
     recentIds.forEach((id) => {
-      // GET /api/media/event/:eventId?limit=1 — returns total in response
       fetch(`/api/media/event/${id}?limit=1`, { headers })
-        .then((r) => r.ok ? r.json() : null)
+        .then((r) => (r.ok ? r.json() : null))
         .then((data) => {
           if (data?.total != null) {
             setEventPhotoCounts((prev) => ({ ...prev, [id]: data.total }));
@@ -186,14 +176,11 @@ export function Dashboard({ onNavigate, user }: DashboardProps) {
     });
   }, [allEvents]);
 
-  // ── Derived data ───────────────────────────────────────────────────────────
   const today = new Date().toISOString().split("T")[0];
 
   const upcomingRaw = allEvents
     .filter((e) => toDateOnly(e.startDate) > today)
     .sort((a, b) => a.startDate.localeCompare(b.startDate));
-
-  const pastRaw = allEvents.filter((e) => toDateOnly(e.startDate) <= today);
 
   const statsData = [
     {
@@ -234,7 +221,7 @@ export function Dashboard({ onNavigate, user }: DashboardProps) {
       name: e.title,
       category: e.category,
       date: formatDisplayDate(e.startDate),
-      photos: eventPhotoCounts[e._id] ?? 0,   // real count once fetched
+      photos: eventPhotoCounts[e._id] ?? 0,
       image: e.coverImage?.trim() ? e.coverImage : FALLBACK_IMAGE,
       organizer: e.organizer,
     }));
@@ -247,7 +234,6 @@ export function Dashboard({ onNavigate, user }: DashboardProps) {
     venue: e.location || "Venue TBD",
   }));
 
-  // ── Quick actions (unchanged) ──────────────────────────────────────────────
   const allActions = [
     { label: "Create Event", icon: Plus,     color: "#10b981", screen: "createevent", roles: ["Admin"] },
     { label: "Upload Media", icon: Camera,   color: "#3b82f6", screen: "upload",      roles: ["Admin", "Photographer"] },
@@ -268,10 +254,9 @@ export function Dashboard({ onNavigate, user }: DashboardProps) {
     );
   }
 
-  // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="p-6 space-y-6">
-      {/* Quick actions — untouched */}
+      {/* Quick actions */}
       <div>
         <p className="text-xs font-medium uppercase tracking-wider mb-3" style={{ color: "#6b7fa3" }}>Quick Actions</p>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -280,10 +265,7 @@ export function Dashboard({ onNavigate, user }: DashboardProps) {
               key={label}
               onClick={() => onNavigate(screen)}
               className="flex items-center gap-3 p-4 rounded-xl transition-all duration-200 hover:scale-[1.02] group"
-              style={{
-                background: "rgba(11,18,32,0.8)",
-                border: "1px solid rgba(16,185,129,0.12)",
-              }}
+              style={{ background: "rgba(11,18,32,0.8)", border: "1px solid rgba(16,185,129,0.12)" }}
               onMouseEnter={(e) => { e.currentTarget.style.borderColor = `${color}40`; e.currentTarget.style.background = `${color}08`; }}
               onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(16,185,129,0.12)"; e.currentTarget.style.background = "rgba(11,18,32,0.8)"; }}
             >
@@ -303,10 +285,7 @@ export function Dashboard({ onNavigate, user }: DashboardProps) {
           <div
             key={label}
             className="p-5 rounded-xl"
-            style={{
-              background: "rgba(11,18,32,0.8)",
-              border: "1px solid rgba(16,185,129,0.1)",
-            }}
+            style={{ background: "rgba(11,18,32,0.8)", border: "1px solid rgba(16,185,129,0.1)" }}
           >
             <div className="flex items-start justify-between mb-4">
               <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: `${color}15` }}>
@@ -348,11 +327,8 @@ export function Dashboard({ onNavigate, user }: DashboardProps) {
                 <div
                   key={event.id}
                   className="flex gap-4 p-4 rounded-xl cursor-pointer transition-all duration-200 hover:scale-[1.01]"
-                  style={{
-                    background: "rgba(11,18,32,0.8)",
-                    border: "1px solid rgba(16,185,129,0.1)",
-                  }}
-                  onClick={() => onNavigate("eventdetails")}
+                  style={{ background: "rgba(11,18,32,0.8)", border: "1px solid rgba(16,185,129,0.1)" }}
+                  onClick={() => onNavigate("eventdetails", undefined, event.id)}
                 >
                   <img
                     src={event.image}
@@ -411,10 +387,7 @@ export function Dashboard({ onNavigate, user }: DashboardProps) {
                 <div
                   key={event.id}
                   className="p-3.5 rounded-xl cursor-pointer transition-all duration-200 hover:scale-[1.01]"
-                  style={{
-                    background: "rgba(11,18,32,0.8)",
-                    border: "1px solid rgba(16,185,129,0.1)",
-                  }}
+                  style={{ background: "rgba(11,18,32,0.8)", border: "1px solid rgba(16,185,129,0.1)" }}
                 >
                   <div className="flex items-start gap-3">
                     <div
@@ -441,7 +414,7 @@ export function Dashboard({ onNavigate, user }: DashboardProps) {
         </div>
       </div>
 
-      {/* Trending media — now from backend, falls back to Unsplash if empty */}
+      {/* Trending media */}
       <div>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-base font-semibold text-white flex items-center gap-2">
@@ -457,7 +430,10 @@ export function Dashboard({ onNavigate, user }: DashboardProps) {
               key={i}
               className="relative group rounded-xl overflow-hidden cursor-pointer"
               style={{ aspectRatio: "3/2", background: "#0b1220" }}
-              onClick={() => onNavigate("photodetails")}
+              onClick={() => {
+                const raw = trendingRaw[i];
+                if (raw) onNavigate("photodetails", raw);
+              }}
             >
               <img
                 src={src}

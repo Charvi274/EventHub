@@ -436,15 +436,11 @@ function EventCard({
           <div className="flex items-center gap-1 text-xs" style={{ color: "#6b7fa3" }}>
             <Clock size={11} /> {dateFormatted}
           </div>
-          {event.photos > 0 ? (
-            <span className="text-xs" style={{ color: "#6b7fa3" }}>
-              {event.photos.toLocaleString()} photos · {event.videos} videos
-            </span>
-          ) : (
-            <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: "rgba(245,158,11,0.1)", color: "#f59e0b" }}>
-              No media yet
-            </span>
-          )}
+          {event.photos > 0 && (
+  <span className="text-xs" style={{ color: "#6b7fa3" }}>
+    {event.photos.toLocaleString()} photos · {event.videos} videos
+  </span>
+)}
         </div>
       </div>
     </div>
