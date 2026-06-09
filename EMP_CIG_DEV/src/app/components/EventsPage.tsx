@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Search, Filter, Plus, Clock, Camera, ChevronDown, ArrowUpDown, Calendar } from "lucide-react";
-
+import { API_BASE_URL } from '../config';
 interface EventsPageProps {
   onNavigate: (screen: string) => void;
   user?: { name?: string; email?: string; role?: string };
@@ -95,7 +95,7 @@ export function EventsPage({ onNavigate, user }: EventsPageProps) {
           sessionStorage.getItem("token") ||
           "";
 
-        const res = await fetch("/api/events", {
+        const res = await fetch(`${API_BASE_URL}/api/events`, {
           headers: {
             "Content-Type": "application/json",
             ...(token ? { Authorization: `Bearer ${token}` } : {}),

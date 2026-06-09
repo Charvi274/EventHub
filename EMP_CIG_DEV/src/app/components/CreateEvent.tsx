@@ -10,7 +10,7 @@ import {
   Check,
   AlertCircle,
 } from "lucide-react";
-
+import { API_BASE_URL } from '../config';
 // ─────────────────────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────────────────────
@@ -91,7 +91,7 @@ async function uploadCoverImage(file: File): Promise<string> {
   const formData = new FormData();
   formData.append("file", file); // multer expects exactly the field name "file"
 
-  const res = await fetch("/api/events/cover-upload", {
+  const res = await fetch(`${API_BASE_URL}/api/events/cover-upload`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${getAuthToken()}`,
@@ -119,7 +119,7 @@ async function uploadCoverImage(file: File): Promise<string> {
  * Auth: Authorization: Bearer <token>
  */
 async function createEventAPI(payload: object): Promise<string> {
-  const res = await fetch("/api/events", {
+  const res = await fetch(`${API_BASE_URL}/api/events`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

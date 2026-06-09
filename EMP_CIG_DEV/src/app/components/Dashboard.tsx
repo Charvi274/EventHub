@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Camera, Calendar, Image, Video, Users, TrendingUp, Plus, Eye, Heart, Sparkles, Clock, MapPin, ArrowRight } from "lucide-react";
 import type { BackendMedia } from "./Gallery";
-
+import { API_BASE_URL } from '../config';
 interface DashboardProps {
   onNavigate: (screen: string, media?: BackendMedia, eventId?: string) => void;
   user?: {
@@ -96,7 +96,7 @@ export function Dashboard({ onNavigate, user }: DashboardProps) {
   useEffect(() => {
     const fetchEvents = async () => {
       try {
-        const res = await fetch("/api/events", {
+        const res = await fetch(`${API_BASE_URL}/api/events`, {
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${getToken()}`,
@@ -127,13 +127,13 @@ export function Dashboard({ onNavigate, user }: DashboardProps) {
       Authorization: `Bearer ${getToken()}`,
     };
 
-    fetch("/api/media?limit=1", { headers })
+    fetch(`${API_BASE_URL}/api/media?limit=1`, { headers })
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => { if (data?.total != null) setTotalMedia(data.total); })
       .catch(() => {});
 
     // Trending: keep setTrendingRaw INSIDE the .then so `list` is in scope
-    fetch("/api/media?limit=6&sortBy=likes.count&order=desc", { headers })
+    fetch(`${API_BASE_URL}/api/media?limit=6&sortBy=likes.count&order=desc`, { headers })
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         const list: BackendMedia[] = Array.isArray(data?.data) ? data.data : [];
@@ -146,7 +146,7 @@ export function Dashboard({ onNavigate, user }: DashboardProps) {
       })
       .catch(() => {});
 
-    fetch("/api/auth/users/count", { headers })
+    fetch(`${API_BASE_URL}/api/auth/users/count`, { headers })
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => { if (data?.count != null) setTotalUsers(data.count); })
       .catch(() => {});
@@ -165,7 +165,7 @@ export function Dashboard({ onNavigate, user }: DashboardProps) {
       .map((e) => e._id);
 
     recentIds.forEach((id) => {
-      fetch(`/api/media/event/${id}?limit=1`, { headers })
+      fetch(`${API_BASE_URL}/api/media/event/${id}?limit=1`, { headers })
         .then((r) => (r.ok ? r.json() : null))
         .then((data) => {
           if (data?.total != null) {

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Shield, Droplets, Check, AlertCircle } from "lucide-react";
-
+import { API_BASE_URL } from '../config';
 // ── Auth helper ───────────────────────────────────────────────────────────────
 function getToken(): string {
   return localStorage.getItem("token") || sessionStorage.getItem("token") || "";
@@ -84,7 +84,7 @@ export function WatermarkPage() {
 
   // ── Load settings from backend on mount ────────────────────────────────────
   useEffect(() => {
-    fetch("/api/auth/watermark-settings", {
+    fetch(`${API_BASE_URL}/api/auth/watermark-settings`, {
       headers: { Authorization: `Bearer ${getToken()}` },
     })
       .then((r) => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
@@ -108,7 +108,7 @@ export function WatermarkPage() {
       .finally(() => setLoading(false));
 
     // Fetch the logged-in user's actual role for the preview
-    fetch("/api/auth/me", {
+    fetch(`${API_BASE_URL}/api/auth/me`, {
       headers: { Authorization: `Bearer ${getToken()}` },
     })
       .then((r) => r.ok ? r.json() : Promise.reject())
@@ -156,7 +156,7 @@ export function WatermarkPage() {
     setSaveError(null);
 
     try {
-      const res = await fetch("/api/auth/watermark-settings", {
+      const res = await fetch(`${API_BASE_URL}/api/auth/watermark-settings`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",

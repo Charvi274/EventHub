@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Eye, EyeOff, Camera, Image, Users, Calendar, Sparkles, ArrowRight, Loader2, ChevronDown } from "lucide-react";
-
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 interface LoginPageProps {
   onLogin: (role: string, token: string, user: Record<string, unknown>) => void;
 }
@@ -74,7 +74,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
     }
     setIsLoading(true);
     try {
-      const response = await fetch("/api/auth/login", {
+      const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: identifier.trim(), password }),
@@ -102,7 +102,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
     }
     setSignupLoading(true);
     try {
-      const response = await fetch("/api/auth/signup", {
+      const response = await fetch(`${API_BASE_URL}/api/auth/signup`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

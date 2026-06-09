@@ -3,7 +3,7 @@ import * as faceapi from "face-api.js";
 import {
   Scan, Sparkles, Camera, Image, Heart, Download, X, CheckCircle,
 } from "lucide-react";
-
+import { API_BASE_URL } from '../config';
 const MODEL_URL = "/models";
 const MATCH_THRESHOLD = 0.5; // lower = stricter
 
@@ -101,7 +101,7 @@ export function MyPhotos() {
       }
 
       // 2. Fetch all media from backend
-      const res = await fetch("/api/media?limit=500", {
+      const res = await fetch(`${API_BASE_URL}/api/media?limit=500`, {
         headers: { Authorization: `Bearer ${getToken()}` },
       });
       const data = await res.json();
@@ -178,7 +178,7 @@ export function MyPhotos() {
       const photo = matchedPhotos.find((p) => p._id === id);
       if (!photo) continue;
       try {
-        const res = await fetch(`/api/media/${id}/download`, {
+        const res = await fetch(`${API_BASE_URL}/api/media/${id}/download`, {
           headers: { Authorization: `Bearer ${getToken()}` },
         });
         const d = await res.json();

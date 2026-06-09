@@ -3,7 +3,7 @@ import {
   Upload, Image, Video, X, Check, ChevronDown,
   Tag, Camera, Film, AlertCircle,
 } from "lucide-react";
-
+import { API_BASE_URL } from '../config';
 // ── Types ────────────────────────────────────────────────────────────────────
 
 interface BackendEvent {
@@ -71,7 +71,7 @@ export function MediaUpload() {
           sessionStorage.getItem("token") ||
           "";
 
-        const res = await fetch("/api/events", {
+        const res = await fetch(`${API_BASE_URL}/api/events`, {
           headers: {
             "Content-Type": "application/json",
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -162,7 +162,7 @@ export function MediaUpload() {
         resolve();
       };
 
-      xhr.open("POST", "/api/media/upload");
+      xhr.open("POST", `${API_BASE_URL}/api/media/upload`);
       if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
       // Do NOT set Content-Type — browser sets multipart boundary automatically
 
