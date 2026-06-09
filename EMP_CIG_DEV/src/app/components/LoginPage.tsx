@@ -118,8 +118,8 @@ export function LoginPage({ onLogin }: LoginPageProps) {
         return;
       }
       // Auto-login after successful signup
-      sessionStorage.setItem("token", data.token);
-      sessionStorage.setItem("user", JSON.stringify(data.user));
+      localStorage.setItem("token", data.token);
+      localStorage.setItem("user", JSON.stringify(data.user));
       onLogin(data.user?.role ?? signupRole, data.token, data.user);
     } catch {
       setSignupError("Unable to connect to the server. Please try again.");

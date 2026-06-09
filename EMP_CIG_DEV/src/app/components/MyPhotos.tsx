@@ -8,7 +8,7 @@ const MODEL_URL = "/models";
 const MATCH_THRESHOLD = 0.5; // lower = stricter
 
 function getToken() {
-  return localStorage.getItem("token") || "";
+  return localStorage.getItem("token") || sessionStorage.getItem("token") || "";
 }
 
 let modelsLoaded = false;

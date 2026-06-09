@@ -18,7 +18,7 @@ import { WatermarkPage } from "./components/WatermarkPage";
 
 /* MARKER-MAKE-KIT-INVOKED */
 
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000";
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000" || "http://localhost:5173"; // Fallback for code references that haven't been updated yet
 
 type Screen =
   | "dashboard"

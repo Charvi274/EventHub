@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Lock, Eye, EyeOff, Check, AlertCircle, Loader2, LogOut, User, Bell, Info } from "lucide-react";
 
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000";
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000" || "http://localhost:5173";
 
 function getToken() {
   return localStorage.getItem("token") || sessionStorage.getItem("token") || "";
@@ -98,7 +98,7 @@ export function SettingsPage({ onLogout }: { onLogout?: () => void }) {
       return fire("error", "Name must be at least 2 characters.");
     setProfileLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/auth/update-profile`, {
+      const res = await fetch(`${API_BASE}/api/auth/update-profile`, {
         method: "PUT",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` },
         body: JSON.stringify({ name: profile.name, bio: profile.bio }),
@@ -157,7 +157,7 @@ export function SettingsPage({ onLogout }: { onLogout?: () => void }) {
     if (pw.newPw.length < 6) return fire("error", "New password must be at least 6 characters.");
     setPwLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/auth/change-password`, {
+      const res = await fetch(`${API_BASE}/api/auth/change-password`, {
         method: "PUT",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` },
         body: JSON.stringify({ currentPassword: pw.old, newPassword: pw.newPw }),
